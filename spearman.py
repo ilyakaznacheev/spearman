@@ -28,7 +28,7 @@ class Spearman(object):
         module = SourceModule(sourse)
         self.cuda_exec_func = module.get_function("subtract_and_square")
 
-    def calculate(self, number, window=WINDOW):
+    def calculate(self, number=None, window=WINDOW):
         """ main function
             input parameters:
             number - number of comapred values (columns)
@@ -37,6 +37,10 @@ class Spearman(object):
         self.window = window
         # precalculate korellation denominator
         self.denominator = float(self.window*(self.window**2-1))
+
+        # only in case of file reading!
+        if not number:
+            number = self.get_column_count()
 
         exit = False
         try:
@@ -52,6 +56,11 @@ class Spearman(object):
 
         except KeyboardInterrupt:
             sys.exit(lib.errors[1])
+
+    def get_column_count(self):
+        """ quick count calculating """
+        with open(self.FILE_NAME) as counter:
+            return len(counter.readline().split())
 
     def get_line_block(self, val_list):
         """ receive block of input dara """
@@ -159,7 +168,7 @@ class Spearman(object):
 
 def main():
     prog = Spearman()
-    prog.calculate(3)
+    prog.calculate()
 
 
 if __name__ == '__main__':
