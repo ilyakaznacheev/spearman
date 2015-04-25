@@ -9,12 +9,14 @@ import lib
 
 
 class ProcessManager(object):
-    """docstring for ProcessManager"""
+    """asynchronous manager"""
     def __init__(self):
         self.qmanager = QueueManager()
         self.core = Spearman()
+        self.cuda_manager = CUDAManager()
 
     def run(self, window):
+        """ run main method """
         self.core.set_global(window)
 
         try:
@@ -23,29 +25,29 @@ class ProcessManager(object):
             sys.exit(lib.errors[1])
 
     def start(self, window):
+        """ start asynchronous processing """
         input_listener = mp.Process(
-            target=self.core.input_listener,
+            target=self.input_listener,
             args=[
                 self.qmanager.get_queue("input_LH")
                 ]
             )
         input_handler = mp.Process(
-            target=self.core.input_handler,
+            target=self.input_handler,
             args=[
                 self.qmanager.get_queue("input_LH"),
-                self.qmanager.get_queue("input_cuda"),
-                window
+                self.qmanager.get_queue("input_cuda")
                 ]
             )
-        cuda_handler = mp.Process(
-            target=self.core.cuda_handler,
-            args=[
-                self.qmanager.get_queue("input_cuda"),
-                self.qmanager.get_queue("cuda_output")
-                ]
-            )
+        # cuda_handler = mp.Process(
+        #     target=self.cuda_handler,
+        #     args=[
+        #         self.qmanager.get_queue("input_cuda"),
+        #         self.qmanager.get_queue("cuda_output")
+        #         ]
+        #     )
         output_handler = mp.Process(
-            target=self.core.output_handler,
+            target=self.output_handler,
             args=[
                 self.qmanager.get_queue("cuda_output")
                 ]
@@ -53,56 +55,31 @@ class ProcessManager(object):
 
         input_listener.start()
         input_handler.start()
-        cuda_handler.start()
+        # cuda_handler.start()
         output_handler.start()
 
-        # self.core.cuda_handler(
-        #     self.qmanager.get_queue("input_cuda"),
-        #     self.qmanager.get_queue("cuda_output")
-        #     )
+        self.cuda_handler(
+            self.qmanager.get_queue("input_cuda"),
+            self.qmanager.get_queue("cuda_output")
+            )
 
         input_listener.join()
         input_handler.join()
-        cuda_handler.join()
+        # cuda_handler.join()
         output_handler.join()
-
-
-class Spearman(object):
-    """ Computing Spearman korellation index
-        based on cuda parallel computing """
-    WINDOW = 10
-    FILE_NAME = "input.txt"
-    CUDA_SOURSE = "sas.cu"
-
-    def __init__(self, file_name=FILE_NAME):
-        try:
-            self.file_data = file(file_name)
-        except IOError:
-            sys.exit(lib.errors[2].format(file_name))
-        self.init_cuda()
-
-    def debug(self, message):
-        print("DEBUG: {}".format(message))
-        sys.stdout.flush()
-
-    def set_global(self, window):
-        # set processing block size
-        self.window = window
-        # precalculate korellation denominator
-        self.denominator = float(self.window*(self.window**2-1))
 
     def input_listener(self, que_LH):
         while True:
-            line = self.get_line()
+            line = self.core.get_line()
             if line:
                 que_LH.put(line)
             else:
                 que_LH.put(None)
                 return
 
-    def input_handler(self, que_LH, que_cuda, window=WINDOW):
-        # self.set_global(window)
+    def input_handler(self, que_LH, que_cuda):
         index = 0
+        val_list = None
         while True:
             index += 1
             line = que_LH.get()
@@ -110,14 +87,9 @@ class Spearman(object):
                 que_cuda.put(None)
                 return
 
-            if index == 1:
-                val_list = [[] for x in xrange(len(line))]
+            sorted_list = self.core.make_list(line, val_list, index)
 
-            for n, val in enumerate(line):
-                val_list[n].append(float(val))
-
-            if index == window:
-                sorted_list = self.run_sorting(val_list)
+            if sorted_list:
                 que_cuda.put(sorted_list)
                 index = 0
 
@@ -127,77 +99,87 @@ class Spearman(object):
             if not sorted_list:
                 que_out.put(None)
                 return
-            index_list = self.run_comparing(sorted_list)
+            precomp_tuple = self.core.precomparing(sorted_list)
+            comp_list = self.cuda_manager.run_gpu(*precomp_tuple)
+            index_list = self.core.postcomparing(comp_list, precomp_tuple[2])
             que_out.put(index_list)
 
     def output_handler(self, que_cuda):
         while True:
             index_list = que_cuda.get()
             if not index_list:
-                self.output_data("end of sequence")
+                self.core.output_data("end of sequence")
                 return
 
-            self.output_data(index_list)
+            self.core.output_data(index_list)
 
-    def init_cuda(self):
-        """ compile cuda sourse and
-            get executable function object """
-        sourse = open(self.CUDA_SOURSE).read()
+
+class CUDAManager(object):
+    """ CUDA processing manager """
+    CUDA_SOURSE = "sas.cu"
+
+    def __init__(self, file_name=CUDA_SOURSE):
+        sourse = open(file_name).read()
         module = SourceModule(sourse)
         # *************************************************
-        self.context = None
-        self.device = pycuda.autoinit.device
-        self.computecc = self.device.compute_capability()
+        # self.context = None
+        # self.device = pycuda.autoinit.device
+        # self.computecc = self.device.compute_capability()
         # module = drv.module_from_file("sas.cubin")
         # *************************************************
         self.cuda_exec_func = module.get_function("subtract_and_square")
 
-    # def calculate(self, number=None, window=WINDOW):
-    #     """ main function
-    #         input parameters:
-    #         number - number of comapred values (columns)
-    #         window - size of processing block """
-    #     # set processing block size
-    #     self.window = window
-    #     # precalculate korellation denominator
-    #     self.denominator = float(self.window*(self.window**2-1))
+    def run_gpu(self, list_one, list_two, dimension):
+        """ run CUDA GPU computing """
+        Debugger.deb(list_one)
+        Debugger.deb(list_two)
+        sys.stdout.flush()
+        list_one_float = np.array(list_one).astype(np.float32)
+        list_two_float = np.array(list_two).astype(np.float32)
+        dest = np.zeros_like(list_one_float)
+        Debugger.deb(dest.size)
+        self.cuda_exec_func(
+            drv.Out(dest),
+            drv.In(list_one_float),
+            drv.In(list_two_float),
+            block=(len(dest), dimension, 1),  # TODO: add Y dimension
+            grid=(1, 1),
+            shared=dest.size
+            )
 
-    #     # only in case of file reading!
-    #     if not number:
-    #         number = self.get_column_count()
+        return dest.tolist()
 
-    #     exit = False
-    #     try:
-    #         while not exit:
-    #             # create list of lists for input data storege
-    #             val_list = [[] for x in xrange(number)]
 
-    #             exit = self.get_line_block(val_list)
+class Spearman(object):
+    """ Computing Spearman korellation index
+        based on cuda parallel computing """
+    WINDOW = 10
+    FILE_NAME = "input.txt"
+    # CUDA_SOURSE = "sas.cu"
 
-    #             sorted_list = self.run_sorting(val_list)
-    #             index_list = self.run_comparing(sorted_list)
-    #             self.output_data(index_list)
+    def __init__(self, file_name=FILE_NAME):
+        try:
+            self.file_data = file(file_name)
+        except IOError:
+            sys.exit(lib.errors[2].format(file_name))
 
-    #     except KeyboardInterrupt:
-    #         sys.exit(lib.errors[1])
+    def set_global(self, window=WINDOW):
+        """ set global variables """
+        # set processing block size
+        self.window = window
+        # precalculate korellation denominator
+        self.denominator = float(self.window*(self.window**2-1))
 
-    # def get_column_count(self):
-    #     """ quick count calculating """
-    #     with open(self.FILE_NAME) as counter:
-    #         return len(counter.readline().split())
+    def make_list(self, line, val_list, index):
+        """ transponate input arrays """
+        if not val_list:
+            val_list = [[] for x in xrange(len(line))]
 
-    # def get_line_block(self, val_list):
-    #     """ receive block of input dara """
-    #     index = 0
-    #     while index < self.window:
-    #         line = self.get_line()
-    #         if not line:
-    #             return True
-    #         # read data from line and save as columns
-    #         for n, val in enumerate(line):
-    #             val_list[n].append(float(val))
-    #         index += 1
-    #     return False
+        for n, val in enumerate(line):
+            val_list[n].append(float(val))
+
+        if index == self.window:
+            return self.run_sorting(val_list)
 
     def output_data(self, odata):
         """ outputing data """
@@ -221,7 +203,7 @@ class Spearman(object):
 
         return sorted_list
 
-    def run_comparing(self, sorted_list):
+    def precomparing(self, sorted_list):
         """ compare all list pairs """
         list_one = list()
         list_two = list()
@@ -244,8 +226,10 @@ class Spearman(object):
                         )
             index += 1
 
-        # run cuda computing
-        korr_list = self.run_gpu(list_one, list_two, length)
+        return (list_one, list_two, length)
+
+    def postcomparing(self, korr_list, length):
+        """ calculate korellation indexes """
         # split returned list
         splited_result = self.chunks(korr_list, self.window)
         calc_list = (self.calculate_spearman_index(x) for x in splited_result)
@@ -269,33 +253,13 @@ class Spearman(object):
 
         return result
 
-    def run_gpu(self, list_one, list_two, dimension):
-        """ run cuda computing """
-        self.debug(list_one)
-        self.debug(list_two)
-        sys.stdout.flush()
-        list_one_float = np.array(list_one).astype(np.float32)
-        list_two_float = np.array(list_two).astype(np.float32)
-        dest = np.zeros_like(list_one_float)
-        self.debug(dest.size)
-        self.cuda_exec_func(
-            drv.Out(dest),
-            drv.In(list_one_float),
-            drv.In(list_two_float),
-            block=(len(dest), dimension, 1),  # TODO: add Y dimension
-            grid=(1, 1),
-            shared=dest.size
-            )
-
-        return dest.tolist()
-
     def calculate_spearman_index(self, korr_list):
         coefficient = abs(1 - (6*sum(korr_list))/self.denominator)
         return coefficient
 
 
 class QueueManager(object):
-    """docstring for QueueManager"""
+    """ message queue manager """
     def __init__(self):
         self.queue_pull = dict()
 
@@ -305,10 +269,17 @@ class QueueManager(object):
         return self.queue_pull[name]
 
 
+class Debugger(object):
+    """ simple crossprocessing debugger"""
+    @staticmethod
+    def deb(message):
+        print("DEBUG: {}".format(message))
+        sys.stdout.flush()
+
+
 def main():
     prog = ProcessManager()
     prog.run(10)
-
 
 if __name__ == '__main__':
     main()
