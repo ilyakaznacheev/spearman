@@ -39,7 +39,7 @@ class ProcessManager(object):
                 self.qmanager.get_queue("input_cuda")
                 ]
             )
-        # cuda_handler = mp.Process(
+        # cuda_handler = mp.Process(    # <---------------------
         #     target=self.cuda_handler,
         #     args=[
         #         self.qmanager.get_queue("input_cuda"),
@@ -55,7 +55,7 @@ class ProcessManager(object):
 
         input_listener.start()
         input_handler.start()
-        # cuda_handler.start()
+        # cuda_handler.start()    # <---------------------
         output_handler.start()
 
         self.cuda_handler(
@@ -65,7 +65,7 @@ class ProcessManager(object):
 
         input_listener.join()
         input_handler.join()
-        # cuda_handler.join()
+        # cuda_handler.join()    # <---------------------
         output_handler.join()
 
     def input_listener(self, que_LH):
@@ -79,7 +79,7 @@ class ProcessManager(object):
 
     def input_handler(self, que_LH, que_cuda):
         index = 0
-        val_list = None
+        val_list = []
         while True:
             index += 1
             line = que_LH.get()
@@ -88,9 +88,9 @@ class ProcessManager(object):
                 return
 
             sorted_list = self.core.make_list(line, val_list, index)
-
             if sorted_list:
                 que_cuda.put(sorted_list)
+                val_list = []
                 index = 0
 
     def cuda_handler(self, que_handler, que_out):
@@ -102,7 +102,11 @@ class ProcessManager(object):
             precomp_tuple = self.core.precomparing(sorted_list)
             comp_list = self.cuda_manager.run_gpu(*precomp_tuple)
             index_list = self.core.postcomparing(comp_list, precomp_tuple[2])
-            que_out.put(index_list)
+            full_dict = {
+                "keys": precomp_tuple[2],
+                "kfs": index_list
+            }
+            que_out.put(full_dict)
 
     def output_handler(self, que_cuda):
         while True:
@@ -119,25 +123,33 @@ class CUDAManager(object):
     CUDA_SOURSE = "sas.cu"
 
     def __init__(self, file_name=CUDA_SOURSE):
+        # self.file_name = file_name
         sourse = open(file_name).read()
         module = SourceModule(sourse)
         # *************************************************
         # self.context = None
         # self.device = pycuda.autoinit.device
         # self.computecc = self.device.compute_capability()
-        # module = drv.module_from_file("sas.cubin")
+        # self.module = drv.module_from_file("sas.cubin")
+        # self.module = drv.module_from_buffer("sas.ptx")
         # *************************************************
         self.cuda_exec_func = module.get_function("subtract_and_square")
 
     def run_gpu(self, list_one, list_two, dimension):
         """ run CUDA GPU computing """
-        Debugger.deb(list_one)
-        Debugger.deb(list_two)
+        # Debugger.deb(list_one)
+        # Debugger.deb(list_two)
+        # Debugger.deb(dimension)
         sys.stdout.flush()
         list_one_float = np.array(list_one).astype(np.float32)
         list_two_float = np.array(list_two).astype(np.float32)
         dest = np.zeros_like(list_one_float)
-        Debugger.deb(dest.size)
+        # Debugger.deb(len(dest))
+        # ======================================================
+        # sourse = open(self.file_name).read()
+        # self.module = SourceModule(sourse)
+        # self.cuda_exec_func = self.module.get_function("subtract_and_square")
+        # ======================================================
         self.cuda_exec_func(
             drv.Out(dest),
             drv.In(list_one_float),
@@ -173,7 +185,10 @@ class Spearman(object):
     def make_list(self, line, val_list, index):
         """ transponate input arrays """
         if not val_list:
-            val_list = [[] for x in xrange(len(line))]
+            # val_list = [[] for x in xrange(len(line))]
+            # for x in xrange(len(line)):
+            #     val_list.append([])
+            map(lambda x: val_list.append([]), xrange(len(line)))
 
         for n, val in enumerate(line):
             val_list[n].append(float(val))
@@ -246,10 +261,12 @@ class Spearman(object):
     def preset_numbers(self, array, number):
         """ make keys """
         number_list = range(number)
-        result = dict()
+        # result = dict()
+        result = list()
         for x in number_list:
             for y in number_list[x+1:]:
-                result[(x+1, y+1)] = array.next()
+                result.append([(x+1, y+1), array.next()])
+                # result[(x+1, y+1)] = array.next()
 
         return result
 
