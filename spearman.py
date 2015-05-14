@@ -1,121 +1,83 @@
 #!/usr/bin/env python
 import sys
-import pycuda.autoinit
-import pycuda.driver as drv
-from pycuda.compiler import SourceModule
-import numpy as np
 import multiprocessing as mp
+
+try:
+    import pycuda.autoinit
+except ImportError:
+    EMULATE_MOD = True
+else:
+    import pycuda.driver as drv
+    from pycuda.compiler import SourceModule
+    import numpy as np
+    EMULATE_MOD = False
+
 import lib
+# import httpserver
 
 
-class ProcessManager(object):
-    """asynchronous manager"""
+class Model(object):
+
+    WINDOW = 10
+    LOCALHOST = "127.0.0.1"
+
     def __init__(self):
-        self.qmanager = QueueManager()
         self.core = Spearman()
-        self.cuda_manager = CUDAManager()
 
-    def run(self, window):
-        """ run main method """
+        global EMULATE_MOD
+        if EMULATE_MOD:
+            self.cuda_manager = CUDAEmulator()
+        else:
+            self.cuda_manager = CUDAManager()
+
+        # HACK: read from file
+        self.input = open("input.txt")
+
+    def start_spearman(self, host, port, window=WINDOW):
         self.core.set_global(window)
+        # connect to http server
+        # if ok - return true
+        return True
 
-        try:
-            self.start(window)
-        except KeyboardInterrupt:
-            sys.exit(lib.errors[1])
-
-    def start(self, window):
-        """ start asynchronous processing """
-        input_listener = mp.Process(
-            target=self.input_listener,
-            args=[
-                self.qmanager.get_queue("input_LH")
-                ]
-            )
-        input_handler = mp.Process(
-            target=self.input_handler,
-            args=[
-                self.qmanager.get_queue("input_LH"),
-                self.qmanager.get_queue("input_cuda")
-                ]
-            )
-        # cuda_handler = mp.Process(    # <---------------------
-        #     target=self.cuda_handler,
-        #     args=[
-        #         self.qmanager.get_queue("input_cuda"),
-        #         self.qmanager.get_queue("cuda_output")
-        #         ]
-        #     )
-        output_handler = mp.Process(
-            target=self.output_handler,
-            args=[
-                self.qmanager.get_queue("cuda_output")
-                ]
-            )
-
-        input_listener.start()
-        input_handler.start()
-        # cuda_handler.start()    # <---------------------
-        output_handler.start()
-
-        self.cuda_handler(
-            self.qmanager.get_queue("input_cuda"),
-            self.qmanager.get_queue("cuda_output")
-            )
-
-        input_listener.join()
-        input_handler.join()
-        # cuda_handler.join()    # <---------------------
-        output_handler.join()
-
-    def input_listener(self, que_LH):
-        while True:
-            line = self.core.get_line()
-            if line:
-                que_LH.put(line)
-            else:
-                que_LH.put(None)
-                return
-
-    def input_handler(self, que_LH, que_cuda):
+    def calculate_loop(self):
         index = 0
         val_list = []
+
+        # maybe need to make a loop
+        # throw a http listener loop
         while True:
             index += 1
-            line = que_LH.get()
+            # line = self._get_line()
+            # HACK: read from file
+            line = self.core.get_line()
             if not line:
-                que_cuda.put(None)
-                return
+                # end of sequence, need to exit
+                return None
 
             sorted_list = self.core.make_list(line, val_list, index)
             if sorted_list:
-                que_cuda.put(sorted_list)
-                val_list = []
-                index = 0
+                full_dict = self._cuda_processing(sorted_list)
+                break
+        return full_dict
 
-    def cuda_handler(self, que_handler, que_out):
-        while True:
-            sorted_list = que_handler.get()
-            if not sorted_list:
-                que_out.put(None)
-                return
-            precomp_tuple = self.core.precomparing(sorted_list)
-            comp_list = self.cuda_manager.run_gpu(*precomp_tuple)
-            index_list = self.core.postcomparing(comp_list, precomp_tuple[2])
-            full_dict = {
-                "keys": precomp_tuple[2],
-                "kfs": index_list
-            }
-            que_out.put(full_dict)
+    def stop_spearman(self):
+        # disconnect http
+        pass
 
-    def output_handler(self, que_cuda):
-        while True:
-            index_list = que_cuda.get()
-            if not index_list:
-                self.core.output_data("end of sequence")
-                return
+    def _get_line(self):
+        pass
 
-            self.core.output_data(index_list)
+    def _cuda_processing(self, sorted_list):
+        precomp_tuple = self.core.precomparing(sorted_list)
+        comp_list = self.cuda_manager.run_gpu(*precomp_tuple)
+        index_list = self.core.postcomparing(comp_list, precomp_tuple[2])
+
+        full_dict = {
+            "keys": precomp_tuple[2],
+            "kfs": index_list
+        }
+
+        return full_dict
 
 
 class CUDAManager(object):
@@ -123,7 +85,6 @@ class CUDAManager(object):
     CUDA_SOURSE = "sas.cu"
 
     def __init__(self, file_name=CUDA_SOURSE):
-        # self.file_name = file_name
         sourse = open(file_name).read()
         module = SourceModule(sourse)
         # *************************************************
@@ -137,37 +98,50 @@ class CUDAManager(object):
 
     def run_gpu(self, list_one, list_two, dimension):
         """ run CUDA GPU computing """
-        # Debugger.deb(list_one)
-        # Debugger.deb(list_two)
-        # Debugger.deb(dimension)
         sys.stdout.flush()
         list_one_float = np.array(list_one).astype(np.float32)
         list_two_float = np.array(list_two).astype(np.float32)
         dest = np.zeros_like(list_one_float)
-        # Debugger.deb(len(dest))
-        # ======================================================
-        # sourse = open(self.file_name).read()
-        # self.module = SourceModule(sourse)
-        # self.cuda_exec_func = self.module.get_function("subtract_and_square")
-        # ======================================================
+
         self.cuda_exec_func(
             drv.Out(dest),
             drv.In(list_one_float),
             drv.In(list_two_float),
-            block=(len(dest), dimension, 1),  # TODO: add Y dimension
+            block=(len(dest), dimension, 1),
             grid=(1, 1),
-            shared=dest.size
+            shared=dest.size*32*(dimension+1)
             )
 
         return dest.tolist()
 
 
+class CUDAEmulator(object):
+    """ emulate gpu logic
+        if cuda toolkit is not instaled.
+        may takes very long time """
+
+    def __init__(self):
+        Debugger.deb(
+            """\nWARNING: CUDA Toolkit is not installed on device!\n"""
+            """         All GPU calculations will be emulated on CPU\n\n"""
+            """         To prevent this in future please check\n"""
+            """         your GPU device to CUDA compatibility\n"""
+            """         and install CUDA Toolkit on your computer\n"""
+            )
+
+    def run_gpu(self, list_one, list_two, dimension):
+        dest = list()
+
+        for a, b, in zip(list_one, list_two):
+            dest.append((a-b)**2)
+
+        return dest
+
+
 class Spearman(object):
     """ Computing Spearman korellation index
         based on cuda parallel computing """
-    WINDOW = 10
     FILE_NAME = "input.txt"
-    # CUDA_SOURSE = "sas.cu"
 
     def __init__(self, file_name=FILE_NAME):
         try:
@@ -175,7 +149,7 @@ class Spearman(object):
         except IOError:
             sys.exit(lib.errors[2].format(file_name))
 
-    def set_global(self, window=WINDOW):
+    def set_global(self, window):
         """ set global variables """
         # set processing block size
         self.window = window
@@ -185,9 +159,6 @@ class Spearman(object):
     def make_list(self, line, val_list, index):
         """ transponate input arrays """
         if not val_list:
-            # val_list = [[] for x in xrange(len(line))]
-            # for x in xrange(len(line)):
-            #     val_list.append([])
             map(lambda x: val_list.append([]), xrange(len(line)))
 
         for n, val in enumerate(line):
@@ -261,29 +232,16 @@ class Spearman(object):
     def preset_numbers(self, array, number):
         """ make keys """
         number_list = range(number)
-        # result = dict()
-        result = list()
+        result = dict()
         for x in number_list:
             for y in number_list[x+1:]:
-                result.append([(x+1, y+1), array.next()])
-                # result[(x+1, y+1)] = array.next()
+                result[(x, y)] = array.next()
 
         return result
 
     def calculate_spearman_index(self, korr_list):
         coefficient = abs(1 - (6*sum(korr_list))/self.denominator)
         return coefficient
-
-
-class QueueManager(object):
-    """ message queue manager """
-    def __init__(self):
-        self.queue_pull = dict()
-
-    def get_queue(self, name):
-        if name not in self.queue_pull:
-            self.queue_pull[name] = mp.Queue()
-        return self.queue_pull[name]
 
 
 class Debugger(object):
@@ -295,8 +253,15 @@ class Debugger(object):
 
 
 def main():
-    prog = ProcessManager()
-    prog.run(10)
+    prog = Model()
+    prog.start_spearman("127.0.0.1", 8000, 10)
+    while True:
+        result = prog.calculate_loop()
+        if result:
+            print result
+        else:
+            break
+    prog.stop_spearman()
 
 if __name__ == '__main__':
     main()
