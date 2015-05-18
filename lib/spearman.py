@@ -14,13 +14,14 @@ else:
     EMULATE_MOD = False
 
 import lib
-# import httpserver
 
 
 class Model(object):
 
     WINDOW = 10
     LOCALHOST = "127.0.0.1"
+    MODE_NET = "net"
+    MODE_FILE = "file"
 
     def __init__(self):
         self.core = Spearman()
@@ -34,11 +35,22 @@ class Model(object):
         # HACK: read from file
         # self.input = open(os.path.join(os.getcwd(), "input.txt"))
 
-    def start_spearman(self, host, port, window=WINDOW):
-        self.core.set_global(window)
+    def start_spearman(self, mode, entry_frame, **kwargs):
+        self.core.set_global(int(entry_frame))
+
+        if mode == self.MODE_NET:
+            self.reader = lib.NetReader()
+        elif mode == self.MODE_FILE:
+            self.reader = lib.FileReader()
+
+        status = self.reader.start(**kwargs)
+
+        # status self.reader = lib.FileReader(
+        #         kwargs["entry_file"]
+        #         )
         # connect to http server
         # if ok - return true
-        return True
+        return status
 
     def calculate_loop(self):
         index = 0

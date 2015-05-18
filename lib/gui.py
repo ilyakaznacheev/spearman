@@ -3,16 +3,36 @@
 from __future__ import division
 import Tkinter as tk
 import tkMessageBox as tkmb
-# import ttk
+import ttk
 import math
 
 from spearman import Model
 
-tk.Widget.widgets = dict()
+# tk.Widget.widgets = dict()
+tk.Entry.default = ""
+
+
+class MenuFrame(tk.Frame):
+    """ custom Frame"""
+    def __init__(self, *args, **kwargs):
+        tk.Frame.__init__(self, *args, **kwargs)
+
+    def get_fields(self):
+        fields = dict()
+
+        for item in self.widgets.items():
+            if isinstance(item[1], tk.Entry):
+                field = item[1].get()
+                if not field:
+                    field = item[1].default
+                    item[1].insert(0, field)
+                fields[item[0]] = field
+
+        return fields
 
 
 class Window(tk.Tk):
-    """Main window class"""
+    """Main GUI window class"""
     WIDTH_MENU = 50
     CANVAS_SIZE = 500
     CANVAS_INDENT = 20
@@ -30,56 +50,120 @@ class Window(tk.Tk):
         self._init_widgets()
 
     def _init_widgets(self):
+        """ init cintainer widgets """
         self.vpan = tk.PanedWindow(self, orient=tk.VERTICAL)
-
-        self.pan = tk.PanedWindow(sashrelief=tk.RAISED)
-        self.status_frame = tk.Frame(self.vpan)
-
-        self.vpan.add(self.pan)
-
         self.vpan.pack(fill=tk.BOTH, expand=1)
 
-        self.menu_frame = tk.Frame(self.pan)
-        self.canvas_frame = tk.Frame(self.pan)
+        self.pan = tk.PanedWindow(sashrelief=tk.RAISED)
+        self.vpan.add(self.pan)
 
+        self.menu_frame = tk.Frame(self.pan)
         self.pan.add(self.menu_frame)
+
+        self.canvas_frame = tk.Frame(self.pan)
         self.pan.add(self.canvas_frame)
 
-        # self.menu_frame.pack(side='left', fill='y')
-        # self.canvas_frame.pack(side='right', fill='both')
+        """ status_frame will be added while event called """
+        self.status_frame = tk.Frame(self.vpan)
 
-        self._init_menu(self.menu_frame)
+        self.note = ttk.Notebook(self.menu_frame)
+        self.note.pack()
+
+        self.tabs = dict()
+        self.tabs["net"] = MenuFrame(self.note)
+        self.note.add(self.tabs["net"], text="Net")
+
+        self.tabs["file"] = MenuFrame(self.note)
+        self.note.add(self.tabs["file"], text="File")
+
+        """ init widgets """
+        self._init_net_menu(self.tabs["net"])
+        self._init_file_menu(self.tabs["file"])
+        self._init_buttons(self.menu_frame)
         self._init_canvas(self.canvas_frame)
         self._init_stat_bar(self.status_frame)
 
-    def _init_menu(self, frame):
-        frame.widgets["label_host"] = tk.Label(self.menu_frame, text="host", font=self.FONT)
-        frame.widgets["entry_host"] = tk.Entry(self.menu_frame, font=self.FONT)
+    def _init_net_menu(self, frame):
+        frame.widgets = dict()
+        frame.widgets["label_host"] = tk.Label(
+            frame, text="host", font=self.FONT
+            )
+        frame.widgets["entry_host"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_host"].default = "127.0.0.1"
 
-        frame.widgets["label_port"] = tk.Label(self.menu_frame, text="port", font=self.FONT)
-        frame.widgets["entry_port"] = tk.Entry(self.menu_frame, font=self.FONT)
+        frame.widgets["label_port"] = tk.Label(
+            frame, text="port", font=self.FONT
+            )
+        frame.widgets["entry_port"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_port"].default = "8000"
 
-        frame.widgets["label_frame"] = tk.Label(self.menu_frame, text="frame size", font=self.FONT)
-        frame.widgets["entry_frame"] = tk.Entry(self.menu_frame, font=self.FONT)
+        frame.widgets["label_frame"] = tk.Label(
+            frame, text="frame size", font=self.FONT
+            )
+        frame.widgets["entry_frame"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_frame"].default = "10"
 
-        frame.widgets["button_start"] = tk.Button(self.menu_frame, text="start", font=self.FONT)
-        frame.widgets["button_start"].bind("<Button-1>", self.event_start)
+        frame.widgets["label_host"].grid(
+            row=0, column=0, columnspan=1, sticky=tk.W
+            )
+        frame.widgets["entry_host"].grid(
+            row=0, column=1, columnspan=2, sticky=tk.W
+            )
 
-        frame.widgets["button_stop"] = tk.Button(self.menu_frame, text="stop", font=self.FONT)
-        frame.widgets["button_stop"].bind("<Button-1>", self.event_stop)
+        frame.widgets["label_port"].grid(
+            row=1, column=0, columnspan=1, sticky=tk.W
+            )
+        frame.widgets["entry_port"].grid(
+            row=1, column=1, columnspan=2, sticky=tk.W
+            )
 
-        frame.widgets["label_host"].grid(row=0, column=0, columnspan=1, sticky=tk.W)
-        frame.widgets["entry_host"].grid(row=0, column=1, columnspan=2, sticky=tk.W)
+        frame.widgets["label_frame"].grid(
+            row=2, column=0, columnspan=1, sticky=tk.W
+            )
+        frame.widgets["entry_frame"].grid(
+            row=2, column=1, columnspan=2, sticky=tk.W
+            )
 
-        frame.widgets["label_port"].grid(row=1, column=0, columnspan=1, sticky=tk.W)
-        frame.widgets["entry_port"].grid(row=1, column=1, columnspan=2, sticky=tk.W)
+    def _init_file_menu(self, frame):
+        frame.widgets = dict()
+        frame.widgets["label_file"] = tk.Label(
+            frame, text="path to file", font=self.FONT
+            )
+        frame.widgets["entry_file"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_file"].default = "input.txt"
 
-        frame.widgets["label_frame"].grid(row=2, column=0, columnspan=1, sticky=tk.W)
-        frame.widgets["entry_frame"].grid(row=2, column=1, columnspan=2, sticky=tk.W)
+        frame.widgets["label_frame"] = tk.Label(
+            frame, text="frame size", font=self.FONT
+            )
+        frame.widgets["entry_frame"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_frame"].default = "10"
 
-        frame.widgets["button_start"].grid(row=3, column=0, columnspan=3, sticky=tk.EW)
+        frame.widgets["label_file"].grid(
+            row=0, column=0, columnspan=1, sticky=tk.W
+            )
+        frame.widgets["entry_file"].grid(
+            row=0, column=1, columnspan=2, sticky=tk.W
+            )
+
+        frame.widgets["label_frame"].grid(
+            row=1, column=0, columnspan=1, sticky=tk.W
+            )
+        frame.widgets["entry_frame"].grid(
+            row=1, column=1, columnspan=2, sticky=tk.W
+            )
+
+    def _init_buttons(self, frame):
+        frame.widgets = dict()
+        self.btn_start = tk.Button(frame, text="start", font=self.FONT)
+        self.btn_stop = tk.Button(frame, text="stop", font=self.FONT)
+
+        frame.widgets["button_start"] = self.btn_start
+        frame.widgets["button_stop"] = self.btn_stop
+
+        self.btn_start.pack(fill=tk.X)
 
     def _init_canvas(self, frame, size=CANVAS_SIZE, shift=CANVAS_INDENT):
+        frame.widgets = dict()
         frame.widgets["can"] = tk.Canvas(
             frame,
             height=size,
@@ -93,6 +177,7 @@ class Window(tk.Tk):
         self.can.circles = dict()
         self.can.clables = dict()
         self.can.lines = dict()
+        self.can.widgets = dict()
         self.can.node_number = 0
 
         self.size = size
@@ -103,6 +188,7 @@ class Window(tk.Tk):
         self.can.pack(fill=tk.BOTH, expand=1)
 
     def _init_stat_bar(self, frame):
+        frame.widgets = dict()
         self.status_msg = tk.StringVar()
         frame.widgets["label"] = tk.Label(
             frame, textvariable=self.status_msg, font=self.FONT
@@ -158,14 +244,12 @@ class Window(tk.Tk):
         self.draw_nodes(small_radius)
 
     def draw_edges(self):
-        # self.can.lines = dict()
         circles = self.coords.keys()
         for x in circles:
             for y in circles[x+1:]:
                 pair_coords = self.coords[x]+self.coords[y]
 
                 self.can.lines[(x, y)] = self.can.create_line(
-                    # *self.get_shift(*pair_coords),
                     *pair_coords,
                     fill="blue", width=2
                     )
@@ -208,7 +292,6 @@ class Window(tk.Tk):
                 )
 
     def clear_graph(self):
-        # self.can.delete("all")
         map(self.can.delete, self.can.circles.values())
         map(self.can.delete, self.can.clables.values())
         map(self.can.delete, self.can.lines.values())
@@ -225,34 +308,29 @@ class Window(tk.Tk):
         self.fields_up()
 
     def fields_down(self):
-        self.menu_frame.widgets["entry_host"].config(state=tk.DISABLED)
-        self.menu_frame.widgets["entry_port"].config(state=tk.DISABLED)
-        self.menu_frame.widgets["entry_frame"].config(state=tk.DISABLED)
-        self.menu_frame.widgets["button_start"].grid_remove()
-        self.menu_frame.widgets["button_stop"].grid(
-            row=3, column=0, columnspan=3, sticky=tk.EW
-            )
+        current_tab = self._get_current_tab()
+        for widget in current_tab.widgets.values():
+            widget.config(state=tk.DISABLED)
+        self.btn_start.pack_forget()
+        self.btn_stop.pack(fill=tk.X)
 
     def fields_up(self):
-        self.menu_frame.widgets["entry_host"].config(state=tk.NORMAL)
-        self.menu_frame.widgets["entry_port"].config(state=tk.NORMAL)
-        self.menu_frame.widgets["entry_frame"].config(state=tk.NORMAL)
-        self.menu_frame.widgets["button_stop"].grid_remove()
-        self.menu_frame.widgets["button_start"].grid(
-            row=3, column=0, columnspan=3, sticky=tk.EW
-            )
+        current_tab = self._get_current_tab()
+        for widget in current_tab.widgets.values():
+            widget.config(state=tk.NORMAL)
+        self.btn_stop.pack_forget()
+        self.btn_start.pack(fill=tk.X)
 
     def get_fields(self):
-        entry_host = self.menu_frame.widgets["entry_host"].get()
-        entry_port = self.menu_frame.widgets["entry_port"].get()
-        entry_frame = self.menu_frame.widgets["entry_frame"].get()
-
-        fields = (
-            ["127.0.0.1", entry_host][bool(entry_host)],
-            int([8000, entry_port][bool(entry_port)]),
-            int([10, entry_frame][bool(entry_frame)]),
-            )
+        current_tab = self._get_current_tab()
+        fields = current_tab.get_fields()
         return fields
+
+    def _get_current_tab(self):
+        return self.tabs.get(self.get_current_tab_name())
+
+    def get_current_tab_name(self):
+        return self.note.tab(self.note.select(), "text").lower()
 
     def msg_info(self, message, title="Info"):
         tkmb.showinfo(title=title, message=message)
@@ -266,7 +344,6 @@ class Window(tk.Tk):
     def msg_status(self, message):
         self.vpan.add(self.status_frame)
         self.status_msg.set(message)
-        # self.status_lable.grid()
 
     def status_clear(self):
         self.vpan.forget(self.status_frame)
@@ -284,11 +361,11 @@ class Presenter(object):
         self._bind_view_events()
 
     def _bind_view_events(self):
-        self.view.menu_frame.widgets["button_start"].bind(
+        self.view.btn_start.bind(
             "<Button-1>", self.event_start
             )
 
-        self.view.menu_frame.widgets["button_stop"].bind(
+        self.view.btn_stop.bind(
             "<Button-1>", self.event_stop
             )
         self.view.bind("<<Stop>>", self.event_stop)
@@ -300,7 +377,6 @@ class Presenter(object):
         self.view.event_start(event)
         self.run_state = True
         print("event start")
-        # self.view.msg_status("test")
 
         start = self.start_spearman()
 
@@ -316,23 +392,25 @@ class Presenter(object):
         self.view.event_stop(event)
         self.run_state = False
         print("event stop")
-        # self.view.status_clear()
 
     def run(self):
+        """ start gui event loop """
         self.view.mainloop()
 
     def start_spearman(self):
+        """ prepare calculation core object """
         fields = self.view.get_fields()
-        result = self.model.start_spearman(*fields)
+        """ start calculation with input fields data """
+        result = self.model.start_spearman(
+            self.view.get_current_tab_name(),
+            **fields
+            )
         if not result:
-            self.view.msg_error(
-                "Error while connecting {host}:{port}".format(
-                    fields[0], fields[1]
-                    )
-                )
+            self.view.msg_error("Error while connecting")
         return result
 
     def calculate_loop(self):
+        """ calculate some data package (one iteration) """
         full_dict = self.model.calculate_loop()
         if full_dict and self.run_state:
             if full_dict["keys"] != self.view.can.node_number:
@@ -348,6 +426,7 @@ class Presenter(object):
             self.view.event_generate("<<Stop>>")
 
     def stop_spearman(self):
+        """ stop calculation """
         self.model.stop_spearman()
 
 

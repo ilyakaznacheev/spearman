@@ -59,3 +59,34 @@ class ArgParser(argparse.ArgumentParser):
             dest="number", type=int, default=3,
             help="number of values in line"
             )
+
+
+class DataReader(object):
+    """docstring for DataReader"""
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def get_line(self):
+        pass
+
+
+class NetReader(DataReader):
+    """ Simple HTTP client"""
+    def start(self, entry_port, entry_host):
+        super(NetReader, self).__init__()
+        return False
+
+
+class FileReader(DataReader):
+    """ Simple file reader """
+    def start(self, entry_file):
+        super(FileReader, self).__init__()
+        try:
+            self.input_file = open(entry_file)
+        except IOError:
+            return False
+        else:
+            return True
+
+    def get_line(self):
+        return  self.input_file.readline()

@@ -1,4 +1,4 @@
-from lib.gui import Presenter
+from gui import Presenter
 
 
 def main():
