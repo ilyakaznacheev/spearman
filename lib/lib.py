@@ -1,4 +1,7 @@
 import argparse
+import httplib
+from tcp_client import SpearmanSocketListener
+
 
 INNER_SOCKET = ("127.0.0.1", 8000)
 
@@ -71,16 +74,27 @@ class DataReader(object):
 
 
 class NetReader(DataReader):
-    """ Simple HTTP client"""
+    """ Simple Socket client """
     def start(self, entry_port, entry_host):
-        super(NetReader, self).__init__()
-        return False
+        self.listener = SpearmanSocketListener(entry_host, int(entry_port))
+        status = self.listener.connect()
+        if status:
+            self.listener.register()
+
+        return status
+
+    def get_line(self):
+        line = self.listener.get()
+        print("line: {}".format(line))
+        return line
+
+    def stop(self):
+        self.listener.disconnect()
 
 
 class FileReader(DataReader):
     """ Simple file reader """
     def start(self, entry_file):
-        super(FileReader, self).__init__()
         try:
             self.input_file = open(entry_file)
         except IOError:
@@ -89,4 +103,8 @@ class FileReader(DataReader):
             return True
 
     def get_line(self):
-        return  self.input_file.readline()
+        raw_line = self.input_file.readline()
+        return raw_line.split()
+
+    def stop(self):
+        self.input_file.close()

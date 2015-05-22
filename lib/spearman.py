@@ -62,7 +62,7 @@ class Model(object):
             index += 1
             # line = self._get_line()
             # HACK: read from file
-            line = self.core.get_line()
+            line = self.reader.get_line()
             if not line:
                 # end of sequence, need to exit
                 return None
@@ -74,8 +74,7 @@ class Model(object):
         return full_dict
 
     def stop_spearman(self):
-        # disconnect http
-        pass
+        self.reader.stop()
 
     def _get_line(self):
         pass
