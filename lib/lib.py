@@ -85,7 +85,8 @@ class NetReader(DataReader):
 
     def get_line(self):
         line = self.listener.get()
-        print("line: {}".format(line))
+        # print("line: {}".format(line))
+        print('*'),
         return line
 
     def stop(self):

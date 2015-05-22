@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 import sys
-import os
-# import multiprocessing as mp
+import math
 
 try:
     import pycuda.autoinit
@@ -32,9 +31,6 @@ class Model(object):
         else:
             self.cuda_manager = CUDAManager()
 
-        # HACK: read from file
-        # self.input = open(os.path.join(os.getcwd(), "input.txt"))
-
     def start_spearman(self, mode, entry_frame, **kwargs):
         self.core.set_global(int(entry_frame))
 
@@ -45,26 +41,17 @@ class Model(object):
 
         status = self.reader.start(**kwargs)
 
-        # status self.reader = lib.FileReader(
-        #         kwargs["entry_file"]
-        #         )
-        # connect to http server
-        # if ok - return true
         return status
 
     def calculate_loop(self):
         index = 0
         val_list = []
 
-        # maybe need to make a loop
-        # throw a http listener loop
         while True:
             index += 1
-            # line = self._get_line()
-            # HACK: read from file
             line = self.reader.get_line()
             if not line:
-                # end of sequence, need to exit
+                """ end of sequence, need to exit """
                 return None
 
             sorted_list = self.core.make_list(line, val_list, index)
@@ -76,16 +63,15 @@ class Model(object):
     def stop_spearman(self):
         self.reader.stop()
 
-    def _get_line(self):
-        pass
-
     def _cuda_processing(self, sorted_list):
         precomp_tuple = self.core.precomparing(sorted_list)
-        comp_list = self.cuda_manager.run_gpu(*precomp_tuple)
-        index_list = self.core.postcomparing(comp_list, precomp_tuple[2])
+        comp_list = self.cuda_manager.run_gpu(
+            *precomp_tuple[:3], window=self.core.window
+            )
+        index_list = self.core.postcomparing(comp_list, precomp_tuple[3])
 
         full_dict = {
-            "keys": precomp_tuple[2],
+            "keys": precomp_tuple[3],
             "kfs": index_list
         }
 
@@ -95,6 +81,7 @@ class Model(object):
 class CUDAManager(object):
     """ CUDA processing manager """
     CUDA_SOURSE = "sas.cu"
+    GRID_SIZE = 16
 
     def __init__(self, file_name=CUDA_SOURSE):
         sourse = open(file_name).read()
@@ -108,20 +95,27 @@ class CUDAManager(object):
         # *************************************************
         self.cuda_exec_func = module.get_function("subtract_and_square")
 
-    def run_gpu(self, list_one, list_two, dimension):
+    def run_gpu(self, list_one, list_two, dimension, window):
         """ run CUDA GPU computing """
         sys.stdout.flush()
         list_one_float = np.array(list_one).astype(np.float32)
         list_two_float = np.array(list_two).astype(np.float32)
         dest = np.zeros_like(list_one_float)
 
+        xdim = int(math.ceil(len(dest)/float(self.GRID_SIZE)))
+        ydim = 1
+        zdim = 1
+        # shared_size = (xdim**2)*32
+        # array_len = np.float32(len(dest))
+        array_len = np.asarray(np.int32(len(dest)))
+
         self.cuda_exec_func(
             drv.Out(dest),
             drv.In(list_one_float),
             drv.In(list_two_float),
-            block=(len(dest), dimension, 1),
-            grid=(1, 1),
-            shared=dest.size*32*(dimension+1)
+            drv.In(array_len),
+            block=(xdim, ydim, zdim),
+            grid=(self.GRID_SIZE, self.GRID_SIZE)
             )
 
         return dest.tolist()
@@ -141,7 +135,7 @@ class CUDAEmulator(object):
             """         and install CUDA Toolkit on your computer\n"""
             )
 
-    def run_gpu(self, list_one, list_two, dimension):
+    def run_gpu(self, list_one, list_two, dimension, window):
         dest = list()
 
         for a, b, in zip(list_one, list_two):
@@ -156,16 +150,13 @@ class Spearman(object):
     FILE_NAME = "input.txt"
 
     def __init__(self, file_name=FILE_NAME):
-        try:
-            self.file_data = open(os.path.join(os.getcwd(), file_name))
-        except IOError:
-            sys.exit(lib.errors[2].format(file_name))
+        pass
 
     def set_global(self, window):
         """ set global variables """
-        # set processing block size
+        """ set processing block size """
         self.window = window
-        # precalculate korellation denominator
+        """ precalculate korellation denominator """
         self.denominator = float(self.window*(self.window**2-1))
 
     def make_list(self, line, val_list, index):
@@ -179,17 +170,17 @@ class Spearman(object):
         if index == self.window:
             return self.run_sorting(val_list)
 
-    def output_data(self, odata):
-        """ outputing data """
-        print(odata)
-        sys.stdout.flush()
-        # pipe/queue will be implemented
+    # def output_data(self, odata):
+    #     """ outputing data """
+    #     print(odata)
+    #     sys.stdout.flush()
+    #     """ pipe/queue will be implemented """
 
-    def get_line(self):
-        """ receive one frame of input data """
-        raw_line = self.file_data.readline()
-        # http will be implemented
-        return raw_line.split()
+    # def get_line(self):
+    #     """ receive one frame of input data """
+    #     raw_line = self.file_data.readline()
+    #     # http will be implemented
+    #     return raw_line.split()
 
     def run_sorting(self, val_list):
         """ calculate sorting indexes """
@@ -206,6 +197,7 @@ class Spearman(object):
         list_one = list()
         list_two = list()
         index = 1
+        dim = 0
         length = len(sorted_list)
         while index < length:
             for num, two in enumerate(sorted_list[index:]):
@@ -222,16 +214,18 @@ class Spearman(object):
                     list_two.extend(
                         [0]*(self.window-len(two))
                         )
+
+                dim += 1
             index += 1
 
-        return (list_one, list_two, length)
+        return (list_one, list_two, dim, length)
 
     def postcomparing(self, korr_list, length):
         """ calculate korellation indexes """
-        # split returned list
+        """ split returned list """
         splited_result = self.chunks(korr_list, self.window)
         calc_list = (self.calculate_spearman_index(x) for x in splited_result)
-        # make keys
+        """ make keys """
         named_dict = self.preset_numbers(calc_list, length)
 
         return named_dict
@@ -266,7 +260,7 @@ class Debugger(object):
 
 def main():
     prog = Model()
-    prog.start_spearman("127.0.0.1", 8000, 10)
+    prog.start_spearman("file", 20, entry_file="../input.txt")
     while True:
         result = prog.calculate_loop()
         if result:
