@@ -170,18 +170,6 @@ class Spearman(object):
         if index == self.window:
             return self.run_sorting(val_list)
 
-    # def output_data(self, odata):
-    #     """ outputing data """
-    #     print(odata)
-    #     sys.stdout.flush()
-    #     """ pipe/queue will be implemented """
-
-    # def get_line(self):
-    #     """ receive one frame of input data """
-    #     raw_line = self.file_data.readline()
-    #     # http will be implemented
-    #     return raw_line.split()
-
     def run_sorting(self, val_list):
         """ calculate sorting indexes """
         sorted_list = list()

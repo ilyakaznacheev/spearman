@@ -1,6 +1,9 @@
 import socket
 import struct
 from Queue import Queue
+import time
+
+import errors
 
 FRAME_TIME_MASK = "h"*8
 
@@ -106,10 +109,13 @@ class TCPCLient(object):
     def _server_command(self, data):
         """ process server's command """
         command = self.formatter.decode_str('i', data[:4])
+        print("\nserver command: {}".format(command))
         if not command:
             self.disconnect()
+            raise errors.TCPErrorServerDisconnect()
         elif command == self.POLL:
-            pass
+            time.sleep(0.1)
+            # pass
         elif command == 1:
             self._add_client(data[4:])
         elif command == -1:
@@ -192,17 +198,31 @@ class SpearmanSocketListener(object):
         self.tcp_client.disconnect()
 
     def read_frame(self):
+        try:
+            result = self._read_frame()
+        except struct.error:
+            raise errors.TCPErrorBrokenPackage()
+        else:
+            return result
+
+    def _read_frame(self):
         """ read frame according some weird frame format """
         while True:
             raw_data = self.tcp_client.get_next()
-            if self.formatter.decode_str('i', raw_data[:4]) == self.FRAME_TYPE:
-                break
+            if len(raw_data) >= 4:
+                if self.formatter.decode_str('i', raw_data[:4]) == self.FRAME_TYPE:
+                    break
 
         time_begin = self.formatter.decode_str(self.TIME_MASK, raw_data[4:20])
         time_end = self.formatter.decode_str(self.TIME_MASK, raw_data[20:36])
         # reserved = raw_data[36:64]
         discret_friq = raw_data[64:68]
         message = raw_data[68:]
+        msg_len_needed = self.ARRAYS_NUMBER*self.ARRAY_ELEMENTS*2
+
+        if len(message) < msg_len_needed:
+            raise errors.TCPErrorBrokenPackage()
+
         raw_array = self.formatter.decode_str(self.ARRAY_MASK, message)
 
         arrays = list(self._chunks(raw_array, self.ARRAY_ELEMENTS))
@@ -228,7 +248,16 @@ class SpearmanSocketListener(object):
 
     def _fill_queue(self):
         """ add new lines from received packages """
-        result = self.read_frame()[0]
+        while True:
+            try:
+                result = self.read_frame()[0]
+            except errors.TCPErrorBrokenPackage:
+                pass
+            except errors.TCPErrorServerDisconnect:
+                result = [None]
+                break
+            else:
+                break
         for line in result:
             self.que.put(line)
 
