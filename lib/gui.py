@@ -251,7 +251,7 @@ class Window(tk.Tk):
 
                 self.can.lines[(x, y)] = self.can.create_line(
                     *pair_coords,
-                    fill="blue", width=2
+                    fill="blue", width=1
                     )
 
     def draw_nodes(self, radius):

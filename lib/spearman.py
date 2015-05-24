@@ -81,7 +81,7 @@ class Model(object):
 class CUDAManager(object):
     """ CUDA processing manager """
     CUDA_SOURSE = "sas.cu"
-    GRID_SIZE = 16
+    MAX_THREADS = 1024
 
     def __init__(self, file_name=CUDA_SOURSE):
         sourse = open(file_name).read()
@@ -102,12 +102,16 @@ class CUDAManager(object):
         list_two_float = np.array(list_two).astype(np.float32)
         dest = np.zeros_like(list_one_float)
 
-        xdim = int(math.ceil(len(dest)/float(self.GRID_SIZE)))
+        xdim = self.MAX_THREADS
         ydim = 1
         zdim = 1
-        # shared_size = (xdim**2)*32
-        # array_len = np.float32(len(dest))
         array_len = np.asarray(np.int32(len(dest)))
+
+        blocks_per_grid = int(math.ceil(len(dest)/float(self.MAX_THREADS)))
+
+        # print("\ntrheads:\t{}\nblocks:\t{}\narray length:\t{}".format(
+        #     xdim, blocks_per_grid, array_len
+        #     ))
 
         self.cuda_exec_func(
             drv.Out(dest),
@@ -115,7 +119,7 @@ class CUDAManager(object):
             drv.In(list_two_float),
             drv.In(array_len),
             block=(xdim, ydim, zdim),
-            grid=(self.GRID_SIZE, self.GRID_SIZE)
+            grid=(blocks_per_grid, 1)
             )
 
         return dest.tolist()
