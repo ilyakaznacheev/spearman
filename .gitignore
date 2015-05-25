@@ -1,4 +1,4 @@
 dependences.txt
-qtest*
-sort.cu
-test*
+input.txt
+*test*
+*.pyc

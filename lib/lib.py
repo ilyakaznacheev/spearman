@@ -1,4 +1,7 @@
 import argparse
+import httplib
+from tcp_client import SpearmanSocketListener
+
 
 INNER_SOCKET = ("127.0.0.1", 8000)
 
@@ -41,6 +44,11 @@ class ArgParser(argparse.ArgumentParser):
             dest="number", type=int, default=3,
             help="number of values in line"
             )
+        self.add_argument(
+            "-s", "--sleep-time",
+            dest="sleep", type=float, default=0.,
+            help="time to idle between iterations"
+            )
 
     def _initiate_params_reader(self):
         """initiate default parameters"""
@@ -54,3 +62,50 @@ class ArgParser(argparse.ArgumentParser):
             dest="number", type=int, default=3,
             help="number of values in line"
             )
+
+
+class DataReader(object):
+    """docstring for DataReader"""
+    def __init__(self, **kwargs):
+        self.kwargs = kwargs
+
+    def get_line(self):
+        pass
+
+
+class NetReader(DataReader):
+    """ Simple Socket client """
+    def start(self, entry_port, entry_host):
+        self.listener = SpearmanSocketListener(entry_host, int(entry_port))
+        status = self.listener.connect()
+        if status:
+            self.listener.register()
+
+        return status
+
+    def get_line(self):
+        line = self.listener.get()
+        # print("line: {}".format(line))
+        print('*'),
+        return line
+
+    def stop(self):
+        self.listener.disconnect()
+
+
+class FileReader(DataReader):
+    """ Simple file reader """
+    def start(self, entry_file):
+        try:
+            self.input_file = open(entry_file)
+        except IOError:
+            return False
+        else:
+            return True
+
+    def get_line(self):
+        raw_line = self.input_file.readline()
+        return raw_line.split()
+
+    def stop(self):
+        self.input_file.close()

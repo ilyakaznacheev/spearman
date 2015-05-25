@@ -6,7 +6,7 @@ import lib
 
 
 class FileGenerator(object):
-    SLEEP_TIME = 1000
+    SLEEP_TIME = 0.
 
     def __init__(self, filename):
         try:
@@ -14,12 +14,12 @@ class FileGenerator(object):
         except IOError:
             sys.exit(lib.errors[2].format(filename))
 
-    def run(self, number):
+    def run(self, number, sleep_time=SLEEP_TIME):
         while True:
             try:
                 string = self.generate(number)
                 self.man_file.write(string)
-                time.sleep(self.SLEEP_TIME/1000)
+                time.sleep(sleep_time)
             except KeyboardInterrupt:
                 sys.exit(lib.errors[1])
 
