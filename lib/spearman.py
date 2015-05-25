@@ -2,6 +2,13 @@
 import sys
 import math
 
+__version__ = "0.2"
+__author__ = "Ilya Kaznacheev"
+
+"""
+Check if Python library for CUDA
+is installed, if not - enable emulation mode
+"""
 try:
     import pycuda.autoinit
 except ImportError:
@@ -16,7 +23,7 @@ import lib
 
 
 class Model(object):
-
+    """ Manage calculation processes """
     WINDOW = 10
     LOCALHOST = "127.0.0.1"
     MODE_NET = "net"
