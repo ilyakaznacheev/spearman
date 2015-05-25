@@ -81,7 +81,7 @@ class Model(object):
 class CUDAManager(object):
     """ CUDA processing manager """
     CUDA_SOURSE = "sas.cu"
-    MAX_THREADS = 1024
+    MAX_THREADS = 512
 
     def __init__(self, file_name=CUDA_SOURSE):
         sourse = open(file_name).read()
@@ -95,6 +95,9 @@ class CUDAManager(object):
         # *************************************************
         self.cuda_exec_func = module.get_function("subtract_and_square")
 
+        device = pycuda.tools.get_default_device()
+        self.capability = device.compute_capability()
+
     def run_gpu(self, list_one, list_two, dimension, window):
         """ run CUDA GPU computing """
         sys.stdout.flush()
@@ -102,16 +105,12 @@ class CUDAManager(object):
         list_two_float = np.array(list_two).astype(np.float32)
         dest = np.zeros_like(list_one_float)
 
-        xdim = self.MAX_THREADS
+        xdim = self.MAX_THREADS * self.capability[0]
         ydim = 1
         zdim = 1
         array_len = np.asarray(np.int32(len(dest)))
 
-        blocks_per_grid = int(math.ceil(len(dest)/float(self.MAX_THREADS)))
-
-        # print("\ntrheads:\t{}\nblocks:\t{}\narray length:\t{}".format(
-        #     xdim, blocks_per_grid, array_len
-        #     ))
+        blocks_per_grid = int(math.ceil(len(dest)/float(xdim)))
 
         self.cuda_exec_func(
             drv.Out(dest),
