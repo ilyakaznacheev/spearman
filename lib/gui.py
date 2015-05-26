@@ -393,6 +393,8 @@ class Presenter(object):
         self.run_state = False
         print("event stop")
 
+        self.stop_spearman()
+
     def run(self):
         """ start gui event loop """
         self.view.mainloop()
