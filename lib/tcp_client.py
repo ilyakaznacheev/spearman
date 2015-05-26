@@ -1,11 +1,17 @@
 import socket
 import struct
 from Queue import Queue
+from Queue import Empty as QueueEmpty
 import time
+import multiprocessing as mp
 
 import errors
 
-FRAME_TIME_MASK = "h"*8
+# FRAME_TIME_MASK = "h"*8
+
+COMMAND_CONNECT = "connect"
+COMMAND_REGISTER = "register"
+COMMAND_DISCONNECT = "disconnect"
 
 
 class TCPCLient(object):
@@ -262,21 +268,131 @@ class SpearmanSocketListener(object):
             self.que.put(line)
 
 
-def main():
-    host = "192.168.0.105"
-    port = 8000
-    listener = SpearmanSocketListener(host, port)
-    listener.connect()
-    listener.register()
+class AsyncManager(object):
+    """
+    Manages Asyncronous tcp client
 
-    while True:
-        result = listener.get()
-        if not result:
-            break
+    public classes:
+    - connect - connect to remote server
+    - get - receive data pacakge with length equall frame size
+    - disconnect - disconnect from remote server
+    """
+    OWERFLOW_RATE = 100
+
+    def __init__(self, host, port, window=10, owerflow_rate=OWERFLOW_RATE):
+        self.window = window
+        self.owerflow_limit = window * owerflow_rate
+        self.command_que = mp.Queue()
+        self.data_que = mp.Queue()
+        self.tcp_client = AsyncSocketListener(
+            self.command_que, self.data_que,
+            (host, port)
+            )
+
+    def connect(self):
+        self.tcp_client.start()
+        self.command_que.put(COMMAND_CONNECT)
+        self.command_que.put(COMMAND_REGISTER)
+        # FIXIT: need to handle connection status
+        return True
+
+    def disconnect(self):
+        self.command_que.put(COMMAND_DISCONNECT)
+        time.sleep(0.01)
+        self.tcp_client.terminate()
+        # self.tcp_client.join()
+
+    def get(self):
+        step = self.data_que.qsize()/self.owerflow_limit
+        return self._get(self.window, step)
+
+    def _get(self, number, step):
+        """ receive <number> lines from tcp connection"""
+        steppy = 0
+        result = list()
+
+        for x in xrange(number):
+            while steppy < step:
+                dummy = self.data_que.get()
+                if not dummy:
+                    return None
+                steppy += 1
+            else:
+                next_line = self.data_que.get()
+                if not next_line:
+                    return None
+                result.append(next_line)
+                steppy = 0
         else:
-            print(result)
+            return result
 
-    listener.disconnect()
+
+class AsyncSocketListener(mp.Process):
+    """Asyncronous Socket Listener"""
+
+    def __init__(self, command_que, data_que, socket):
+        mp.Process.__init__(self)
+        self.command_que = command_que
+        self.data_que = data_que
+        self.socket = socket
+        self.next = False
+
+    def run(self):
+        """ main command listening loop """
+        self.tcp_client = SpearmanSocketListener(*self.socket)
+
+        while True:
+            try:
+                command = self.command_que.get_nowait()
+            except QueueEmpty:
+                if self.next:
+                    self._default()
+            else:
+                result = self._command(command)
+                if not result:
+                    break
+
+    def _command(self, command):
+        """ handle outer command """
+        if command == COMMAND_CONNECT:
+            return self._connect()
+        elif command == COMMAND_REGISTER:
+            return self._register()
+        elif command == COMMAND_DISCONNECT:
+            return self._disconnect()
+
+    def _connect(self):
+        result = self.tcp_client.connect()
+        if result:
+            self.next = True
+        return result
+
+    def _register(self):
+        self.tcp_client.register()
+        return True
+
+    def _disconnect(self):
+        self.tcp_client.disconnect()
+        self.next = False
+        return False
+
+    def _default(self):
+        """
+        receive next data line
+        and put it into data queue
+        """
+        result = self.tcp_client.get()
+        self.data_que.put(result)
+
+
+def main():
+    tcp_client = AsyncManager("192.168.0.105", 8000)
+    tcp_client.connect()
+    data = tcp_client.get()
+    for line in data:
+        print(line)
+    tcp_client.disconnect()
+    print('ok')
 
 
 if __name__ == '__main__':

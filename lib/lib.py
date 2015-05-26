@@ -1,6 +1,6 @@
 import argparse
-import httplib
-from tcp_client import SpearmanSocketListener
+import sys
+from tcp_client import SpearmanSocketListener, AsyncManager
 
 
 INNER_SOCKET = ("127.0.0.1", 8000)
@@ -75,7 +75,7 @@ class DataReader(object):
 
 class NetReader(DataReader):
     """ Simple Socket client """
-    def start(self, entry_port, entry_host):
+    def start(self, entry_port, entry_host, entry_frame):
         self.listener = SpearmanSocketListener(entry_host, int(entry_port))
         status = self.listener.connect()
         if status:
@@ -85,9 +85,29 @@ class NetReader(DataReader):
 
     def get_line(self):
         line = self.listener.get()
-        # print("line: {}".format(line))
         print('*'),
         return line
+
+    def get(self):
+        pass
+
+    def stop(self):
+        self.listener.disconnect()
+
+
+class AsyncReader(DataReader):
+    """ Asynchronous Socket client """
+    def start(self, entry_port, entry_host, entry_frame):
+        self.listener = AsyncManager(
+            entry_host, int(entry_port), int(entry_frame)
+            )
+        status = self.listener.connect()
+        return status
+
+    def get(self):
+        lines = self.listener.get()
+        print('*'),
+        return lines
 
     def stop(self):
         self.listener.disconnect()
@@ -95,7 +115,8 @@ class NetReader(DataReader):
 
 class FileReader(DataReader):
     """ Simple file reader """
-    def start(self, entry_file):
+    def start(self, entry_file, entry_frame):
+        self.window = int(entry_frame)
         try:
             self.input_file = open(entry_file)
         except IOError:
@@ -107,5 +128,26 @@ class FileReader(DataReader):
         raw_line = self.input_file.readline()
         return raw_line.split()
 
+    def get(self):
+        result = list()
+        for x in xrange(self.window):
+            try:
+                raw_line = self.input_file.readline()
+            except ValueError:
+                return None
+            if not raw_line:
+                return None
+
+            result.append(raw_line.split())
+        return result
+
     def stop(self):
         self.input_file.close()
+
+
+class Debugger(object):
+    """ simple crossprocessing debugger"""
+    @staticmethod
+    def deb(message):
+        print("DEBUG: {}".format(message))
+        sys.stdout.flush()

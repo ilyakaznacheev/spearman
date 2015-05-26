@@ -2,7 +2,7 @@
 import sys
 import math
 
-__version__ = "0.2"
+__version__ = "0.2.1"
 __author__ = "Ilya Kaznacheev"
 
 """
@@ -38,11 +38,11 @@ class Model(object):
         else:
             self.cuda_manager = CUDAManager()
 
-    def start_spearman(self, mode, entry_frame, **kwargs):
-        self.core.set_global(int(entry_frame))
+    def start_spearman(self, mode, **kwargs):
+        self.core.set_global(int(kwargs["entry_frame"]))
 
         if mode == self.MODE_NET:
-            self.reader = lib.NetReader()
+            self.reader = lib.AsyncReader()
         elif mode == self.MODE_FILE:
             self.reader = lib.FileReader()
 
@@ -51,21 +51,13 @@ class Model(object):
         return status
 
     def calculate_loop(self):
-        index = 0
-        val_list = []
-
-        while True:
-            index += 1
-            line = self.reader.get_line()
-            if not line:
-                """ end of sequence, need to exit """
-                return None
-
-            sorted_list = self.core.make_list(line, val_list, index)
-            if sorted_list:
-                full_dict = self._cuda_processing(sorted_list)
-                break
-        return full_dict
+        raw_data = self.reader.get()
+        if raw_data:
+            sorted_list = self.core.make_full_list(raw_data)
+            full_dict = self._cuda_processing(sorted_list)
+            return full_dict
+        else:
+            return None
 
     def stop_spearman(self):
         self.reader.stop()
@@ -137,7 +129,7 @@ class CUDAEmulator(object):
         may takes very long time """
 
     def __init__(self):
-        Debugger.deb(
+        lib.Debugger.deb(
             """\nWARNING: CUDA Toolkit is not installed on device!\n"""
             """         All GPU calculations will be emulated on CPU\n\n"""
             """         To prevent this in future please check\n"""
@@ -166,19 +158,19 @@ class Spearman(object):
         """ set global variables """
         """ set processing block size """
         self.window = window
-        """ precalculate korellation denominator """
+        """ precalculate correlation denominator """
         self.denominator = float(self.window*(self.window**2-1))
 
-    def make_list(self, line, val_list, index):
+    def make_full_list(self, raw_list):
         """ transponate input arrays """
-        if not val_list:
-            map(lambda x: val_list.append([]), xrange(len(line)))
+        val_list = list()
+        map(lambda x: val_list.append([]), xrange(len(raw_list[0])))
 
-        for n, val in enumerate(line):
-            val_list[n].append(float(val))
+        for line in raw_list:
+            for n, val in enumerate(line):
+                val_list[n].append(float(val))
 
-        if index == self.window:
-            return self.run_sorting(val_list)
+        return self.run_sorting(val_list)
 
     def run_sorting(self, val_list):
         """ calculate sorting indexes """
@@ -248,12 +240,12 @@ class Spearman(object):
         return coefficient
 
 
-class Debugger(object):
-    """ simple crossprocessing debugger"""
-    @staticmethod
-    def deb(message):
-        print("DEBUG: {}".format(message))
-        sys.stdout.flush()
+# class Debugger(object):
+#     """ simple crossprocessing debugger"""
+#     @staticmethod
+#     def deb(message):
+#         print("DEBUG: {}".format(message))
+#         sys.stdout.flush()
 
 
 def main():
