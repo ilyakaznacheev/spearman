@@ -13,6 +13,38 @@ tk.Entry.default = ""
 
 FONT = ("Arial", 12)
 
+ELEMENTS_NAME = {
+    0: "FP1",
+    1: "F3",
+    2: "C3",
+    3: "P3",
+    4: "O1",
+    5: "F7",
+    6: "T3",
+    7: "T5",
+    8: "FZ",
+    9: "PZ",
+    10: "A1",
+    11: "FP2",
+    12: "F4",
+    13: "P4",
+    14: "C4",
+    15: "O2",
+    16: "F8",
+    17: "F4",
+    18: "T6",
+    19: "FPZ",
+    20: "CZ",
+    21: "O7",
+    22: "E1",
+    23: "E2",
+    24: "E3",
+    25: "E4",
+    26: "-",
+    27: "brth",
+    28: "res",
+    }
+
 
 class MenuFrame(tk.Frame):
     """ custom Frame"""
@@ -40,6 +72,7 @@ class GraphCanvas(tk.Canvas):
     CANVAS_BG_COLOR = "white"
     SMALL_RADIUS = 15
     CONTRA_RADIUS = 30
+    CUSTOM_LEN = 29
     RGB_MASK = "#{red:02X}{green:02X}{blue:02X}"
 
     def __init__(
@@ -138,9 +171,15 @@ class GraphCanvas(tk.Canvas):
     def _draw_nodes(self, radius):
         """ draw graph nodes """
         for item in self.coords.items():
-            self._draw_named_circle(*item[1], name=item[0], radius=radius)
+            self._draw_named_circle(
+                *item[1], name=item[0], radius=radius,
+                custom_name=bool(len(self.coords) == self.CUSTOM_LEN)
+                )
 
-    def _draw_named_circle(self, x, y, name, radius=SMALL_RADIUS):
+    def _draw_named_circle(
+            self, x, y, name,
+            radius=SMALL_RADIUS, custom_name=False
+            ):
         """ draw circle with it's own name """
         self.circles = dict()
         self.clables = dict()
@@ -153,8 +192,13 @@ class GraphCanvas(tk.Canvas):
             fill=self.CANVAS_BG_COLOR
             )
 
+        if custom_name:
+            text_name = ELEMENTS_NAME[name]
+        else:
+            text_name = str(name)
+
         self.clables[name] = self.create_text(
-            x, y, text=str(name)
+            x, y, text=text_name
             )
 
     def _circle(self, r, q, x, y):
