@@ -89,6 +89,7 @@ class GraphCanvas(tk.Canvas):
             bg=bg
             )
 
+        self.head = head
         self.item_coords = dict()
         self.circles = dict()
         self.clables = dict()
@@ -98,9 +99,6 @@ class GraphCanvas(tk.Canvas):
 
         self.size = size
         self.shift = shift
-
-        if head:
-            self.draw_headfield()
 
     def draw_headfield(self):
         """ draw a human head slice """
@@ -130,6 +128,11 @@ class GraphCanvas(tk.Canvas):
 
     def draw_graph(self, number, center=None):
         """ draw relation graph """
+
+        """ draw human head slice """
+        if self.head:
+            self.draw_headfield()
+
         angle = 360/number
         radius = (self.CANVAS_SIZE)//2-self.CANVAS_INDENT-self.CONTRA_RADIUS
         small_radius = ((2*math.pi*radius)/number)*0.4
@@ -219,9 +222,10 @@ class GraphCanvas(tk.Canvas):
                 )
 
     def clear_graph(self):
-        map(self.delete, self.circles.values())
-        map(self.delete, self.clables.values())
-        map(self.delete, self.lines.values())
+        self.delete("all")
+        # map(self.delete, self.circles.values())
+        # map(self.delete, self.clables.values())
+        # map(self.delete, self.lines.values())
 
         self.item_coords = dict()
         self.circles = dict()
@@ -271,7 +275,7 @@ class Window(tk.Tk):
         self._init_net_menu(self.tabs["net"])
         self._init_file_menu(self.tabs["file"])
         self._init_buttons(self.menu_frame)
-        self._init_canvas(self.canvas_frame)
+        self._init_canvas(self.canvas_frame, head=False)
         self._init_stat_bar(self.status_frame)
 
     def _init_net_menu(self, frame):
