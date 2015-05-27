@@ -2,7 +2,7 @@
 import sys
 import math
 
-__version__ = "0.2.1"
+__version__ = "0.2.2"
 __author__ = "Ilya Kaznacheev"
 
 """
@@ -238,14 +238,6 @@ class Spearman(object):
     def calculate_spearman_index(self, korr_list):
         coefficient = abs(1 - (6*sum(korr_list))/self.denominator)
         return coefficient
-
-
-# class Debugger(object):
-#     """ simple crossprocessing debugger"""
-#     @staticmethod
-#     def deb(message):
-#         print("DEBUG: {}".format(message))
-#         sys.stdout.flush()
 
 
 def main():

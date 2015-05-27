@@ -11,6 +11,8 @@ from spearman import Model
 # tk.Widget.widgets = dict()
 tk.Entry.default = ""
 
+FONT = ("Arial", 12)
+
 
 class MenuFrame(tk.Frame):
     """ custom Frame"""
@@ -31,18 +33,163 @@ class MenuFrame(tk.Frame):
         return fields
 
 
-class Window(tk.Tk):
-    """Main GUI window class"""
-    WIDTH_MENU = 50
+class GraphCanvas(tk.Canvas):
+    """Correlation Graph Canvas"""
     CANVAS_SIZE = 500
     CANVAS_INDENT = 20
     CANVAS_BG_COLOR = "white"
     SMALL_RADIUS = 15
     CONTRA_RADIUS = 30
+    RGB_MASK = "#{red:02X}{green:02X}{blue:02X}"
+
+    def __init__(
+            self, frame, height=CANVAS_SIZE, width=CANVAS_SIZE,
+            bg=CANVAS_BG_COLOR, size=CANVAS_SIZE,
+            shift=CANVAS_INDENT, head=True
+            ):
+
+        tk.Canvas.__init__(
+            self,
+            frame,
+            height=height,
+            width=width,
+            bg=bg
+            )
+
+        self.item_coords = dict()
+        self.circles = dict()
+        self.clables = dict()
+        self.lines = dict()
+        self.widgets = dict()
+        self.node_number = 0
+
+        self.size = size
+        self.shift = shift
+
+        if head:
+            self.draw_headfield()
+
+    def draw_headfield(self):
+        """ draw a human head slice """
+
+        self.widgets["big_oval"] = self.create_oval(
+            self.shift, self.shift, self.size-self.shift,
+            self.size-self.shift, width=2
+            )
+
+        self.widgets["nose"] = self.create_oval(
+            self.size/2-10, self.shift/2,
+            self.size/2+10, 3*self.shift/2,
+            width=0, fill="red"
+            )
+
+        self.widgets["ear_left"] = self.create_oval(
+            self.shift/2, self.size/2-10,
+            3*self.shift/2, self.size/2+10,
+            width=0, fill="blue"
+            )
+
+        self.widgets["ear_left"] = self.create_oval(
+            self.size-3*self.shift/2, self.size/2-10,
+            self.size-self.shift/2, self.size/2+10,
+            width=0, fill="blue"
+            )
+
+    def draw_graph(self, number, center=None):
+        """ draw relation graph """
+        angle = 360/number
+        radius = (self.CANVAS_SIZE)//2-self.CANVAS_INDENT-self.CONTRA_RADIUS
+        small_radius = ((2*math.pi*radius)/number)*0.4
+
+        if small_radius >= self.CONTRA_RADIUS-10:
+            small_radius = self.CONTRA_RADIUS-10
+
+        if not center:
+            center = [self.CANVAS_SIZE//2]*2
+        self.coords = dict.fromkeys(range(number))
+
+        """ calculate coordinates of all circles """
+        for index, item in enumerate(self.coords):
+            coords = self._circle(
+                radius,
+                angle*index-180,
+                *center
+                )
+            self.coords[item] = coords
+
+        """ draw graph edges """
+        self._draw_edges()
+
+        """ draw graph nodes """
+        self._draw_nodes(small_radius)
+
+    def _draw_edges(self):
+        """ draw graph edges """
+        circles = self.coords.keys()
+        for x in circles:
+            for y in circles[x+1:]:
+                pair_coords = self.coords[x]+self.coords[y]
+
+                self.lines[(x, y)] = self.create_line(
+                    *pair_coords,
+                    fill="blue", width=1
+                    )
+
+    def _draw_nodes(self, radius):
+        """ draw graph nodes """
+        for item in self.coords.items():
+            self._draw_named_circle(*item[1], name=item[0], radius=radius)
+
+    def _draw_named_circle(self, x, y, name, radius=SMALL_RADIUS):
+        """ draw circle with it's own name """
+        self.circles = dict()
+        self.clables = dict()
+        self.circles[name] = self.create_oval(
+            x-radius,
+            y-radius,
+            x+radius,
+            y+radius,
+            width=2,
+            fill=self.CANVAS_BG_COLOR
+            )
+
+        self.clables[name] = self.create_text(
+            x, y, text=str(name)
+            )
+
+    def _circle(self, r, q, x, y):
+        angle = (math.pi/180)*q
+        x_cd = x+r*math.sin(angle)
+        y_cd = y+r*math.cos(angle)
+        return (x_cd, y_cd)
+
+    def renew_colors(self, update):
+        for item in update.items():
+            self.itemconfig(
+                self.lines[item[0]],
+                fill=self.RGB_MASK.format(
+                    red=int(255-255*item[1]),
+                    green=int(255*item[1]),
+                    blue=0
+                    )
+                )
+
+    def clear_graph(self):
+        map(self.delete, self.circles.values())
+        map(self.delete, self.clables.values())
+        map(self.delete, self.lines.values())
+
+        self.item_coords = dict()
+        self.circles = dict()
+        self.clables = dict()
+        self.lines = dict()
+
+
+class Window(tk.Tk):
+    """Main GUI window class"""
+    WIDTH_MENU = 50
     TITLE = "Spearman correlation"
     ICON = r"./spearman.ico"
-    RGB_MASK = "#{red:02X}{green:02X}{blue:02X}"
-    FONT = ("Arial", 12)
 
     def __init__(self):
         tk.Tk.__init__(self)
@@ -86,21 +233,21 @@ class Window(tk.Tk):
     def _init_net_menu(self, frame):
         frame.widgets = dict()
         frame.widgets["label_host"] = tk.Label(
-            frame, text="host", font=self.FONT
+            frame, text="host", font=FONT
             )
-        frame.widgets["entry_host"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_host"] = tk.Entry(frame, font=FONT)
         frame.widgets["entry_host"].default = "127.0.0.1"
 
         frame.widgets["label_port"] = tk.Label(
-            frame, text="port", font=self.FONT
+            frame, text="port", font=FONT
             )
-        frame.widgets["entry_port"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_port"] = tk.Entry(frame, font=FONT)
         frame.widgets["entry_port"].default = "8000"
 
         frame.widgets["label_frame"] = tk.Label(
-            frame, text="frame size", font=self.FONT
+            frame, text="frame size", font=FONT
             )
-        frame.widgets["entry_frame"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_frame"] = tk.Entry(frame, font=FONT)
         frame.widgets["entry_frame"].default = "10"
 
         frame.widgets["label_host"].grid(
@@ -127,15 +274,15 @@ class Window(tk.Tk):
     def _init_file_menu(self, frame):
         frame.widgets = dict()
         frame.widgets["label_file"] = tk.Label(
-            frame, text="path to file", font=self.FONT
+            frame, text="path to file", font=FONT
             )
-        frame.widgets["entry_file"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_file"] = tk.Entry(frame, font=FONT)
         frame.widgets["entry_file"].default = "input.txt"
 
         frame.widgets["label_frame"] = tk.Label(
-            frame, text="frame size", font=self.FONT
+            frame, text="frame size", font=FONT
             )
-        frame.widgets["entry_frame"] = tk.Entry(frame, font=self.FONT)
+        frame.widgets["entry_frame"] = tk.Entry(frame, font=FONT)
         frame.widgets["entry_frame"].default = "10"
 
         frame.widgets["label_file"].grid(
@@ -154,36 +301,22 @@ class Window(tk.Tk):
 
     def _init_buttons(self, frame):
         frame.widgets = dict()
-        self.btn_start = tk.Button(frame, text="start", font=self.FONT)
-        self.btn_stop = tk.Button(frame, text="stop", font=self.FONT)
+        self.btn_start = tk.Button(frame, text="start", font=FONT)
+        self.btn_stop = tk.Button(frame, text="stop", font=FONT)
 
         frame.widgets["button_start"] = self.btn_start
         frame.widgets["button_stop"] = self.btn_stop
 
         self.btn_start.pack(fill=tk.X)
 
-    def _init_canvas(self, frame, size=CANVAS_SIZE, shift=CANVAS_INDENT):
+    def _init_canvas(self, frame, **kwargs):
         frame.widgets = dict()
-        frame.widgets["can"] = tk.Canvas(
+        frame.widgets["can"] = GraphCanvas(
             frame,
-            height=size,
-            width=size,
-            bg=self.CANVAS_BG_COLOR
+            **kwargs
             )
 
         self.can = frame.widgets["can"]
-
-        self.can.item_coords = dict()
-        self.can.circles = dict()
-        self.can.clables = dict()
-        self.can.lines = dict()
-        self.can.widgets = dict()
-        self.can.node_number = 0
-
-        self.size = size
-        self.shift = shift
-
-        self.draw_headfield()
 
         self.can.pack(fill=tk.BOTH, expand=1)
 
@@ -191,115 +324,19 @@ class Window(tk.Tk):
         frame.widgets = dict()
         self.status_msg = tk.StringVar()
         frame.widgets["label"] = tk.Label(
-            frame, textvariable=self.status_msg, font=self.FONT
+            frame, textvariable=self.status_msg, font=FONT
             )
         self.status_lable = frame.widgets["label"]
         self.status_lable.grid(sticky=tk.W)
 
-    def draw_headfield(self):
-        self.can.widgets["big_oval"] = self.can.create_oval(
-            self.shift, self.shift, self.size-self.shift, self.size-self.shift, width=2
-            )
-
-        self.can.widgets["nose"] = self.can.create_oval(
-            self.size/2-10, self.shift/2, self.size/2+10, 3*self.shift/2,
-            width=0, fill="red"
-            )
-
-        self.can.widgets["ear_left"] = self.can.create_oval(
-            self.shift/2, self.size/2-10, 3*self.shift/2, self.size/2+10,
-            width=0, fill="blue"
-            )
-
-        self.can.widgets["ear_left"] = self.can.create_oval(
-            self.size-3*self.shift/2, self.size/2-10, self.size-self.shift/2, self.size/2+10,
-            width=0, fill="blue"
-            )
-
     def draw_graph(self, number, center=None):
-        angle = 360/number
-        radius = (self.CANVAS_SIZE)//2-self.CANVAS_INDENT-self.CONTRA_RADIUS
-        small_radius = ((2*math.pi*radius)/number)*0.4
-
-        if small_radius >= self.CONTRA_RADIUS-10:
-            small_radius = self.CONTRA_RADIUS-10
-
-        if not center:
-            center = [self.CANVAS_SIZE//2]*2
-        self.coords = dict.fromkeys(range(number))
-
-        # calculate coordinates of all circles
-        for index, item in enumerate(self.coords):
-            coords = self.circle(
-                radius,
-                angle*index-180,
-                *center
-                )
-            self.coords[item] = coords
-
-        # draw graph edges
-        self.draw_edges()
-
-        # draw graph nodes
-        self.draw_nodes(small_radius)
-
-    def draw_edges(self):
-        circles = self.coords.keys()
-        for x in circles:
-            for y in circles[x+1:]:
-                pair_coords = self.coords[x]+self.coords[y]
-
-                self.can.lines[(x, y)] = self.can.create_line(
-                    *pair_coords,
-                    fill="blue", width=1
-                    )
-
-    def draw_nodes(self, radius):
-        for item in self.coords.items():
-            self.draw_named_circle(*item[1], name=item[0], radius=radius)
-
-    def draw_named_circle(self, x, y, name, radius=SMALL_RADIUS):
-        self.can.circles = dict()
-        self.can.clables = dict()
-        self.can.circles[name] = self.can.create_oval(
-            x-radius,
-            y-radius,
-            x+radius,
-            y+radius,
-            width=2,
-            fill=self.CANVAS_BG_COLOR
-            )
-
-        self.can.clables[name] = self.can.create_text(
-            x, y, text=str(name)
-            )
-
-    def circle(self, r, q, x, y):
-        angle = (math.pi/180)*q
-        x_cd = x+r*math.sin(angle)
-        y_cd = y+r*math.cos(angle)
-        return (x_cd, y_cd)
+        self.can.draw_graph(number, center)
 
     def renew_colors(self, update):
-        for item in update.items():
-            self.can.itemconfig(
-                self.can.lines[item[0]],
-                fill=self.RGB_MASK.format(
-                    red=int(255-255*item[1]),
-                    green=int(255*item[1]),
-                    blue=0
-                    )
-                )
+        self.can.renew_colors(update)
 
     def clear_graph(self):
-        map(self.can.delete, self.can.circles.values())
-        map(self.can.delete, self.can.clables.values())
-        map(self.can.delete, self.can.lines.values())
-
-        self.can.item_coords = dict()
-        self.can.circles = dict()
-        self.can.clables = dict()
-        self.can.lines = dict()
+        self.can.clear_graph()
 
     def event_start(self, event):
         self.fields_down()
