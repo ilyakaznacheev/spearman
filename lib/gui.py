@@ -68,7 +68,7 @@ class MenuFrame(tk.Frame):
 
 class GraphCanvas(tk.Canvas):
     """Correlation Graph Canvas"""
-    CANVAS_SIZE = 500
+    CANVAS_SIZE = 800
     CANVAS_INDENT = 20
     CANVAS_BG_COLOR = "white"
     SMALL_RADIUS = 15
@@ -127,7 +127,7 @@ class GraphCanvas(tk.Canvas):
             width=0, fill="blue"
             )
 
-    def draw_graph(self, number, center=None):
+    def create(self, number, center=None):
         """ draw relation graph """
 
         """ draw human head slice """
@@ -211,7 +211,7 @@ class GraphCanvas(tk.Canvas):
         y_cd = y+r*math.cos(angle)
         return (x_cd, y_cd)
 
-    def renew_colors(self, update):
+    def refresh(self, update):
         for item in update.items():
             self.itemconfig(
                 self.lines[item[0]],
@@ -222,7 +222,7 @@ class GraphCanvas(tk.Canvas):
                     )
                 )
 
-    def clear_graph(self):
+    def clear(self):
         self.delete("all")
         # map(self.delete, self.circles.values())
         # map(self.delete, self.clables.values())
@@ -232,6 +232,93 @@ class GraphCanvas(tk.Canvas):
         self.circles = dict()
         self.clables = dict()
         self.lines = dict()
+
+
+class TableCanvas(tk.Canvas):
+    """Correlation Table Canvas"""
+    CANVAS_SIZE = 800
+    CANVAS_INDENT = 20
+    CANVAS_BG_COLOR = "white"
+    TRIM_FLOAT = "{0:.{1}f}"
+    TRIM_LEN = 2
+
+    def __init__(
+            self, frame, height=CANVAS_SIZE, width=CANVAS_SIZE,
+            bg=CANVAS_BG_COLOR, shift=CANVAS_INDENT
+            ):
+
+        tk.Canvas.__init__(
+            self,
+            frame,
+            height=height,
+            width=width,
+            bg=bg
+            )
+
+        self.node_number = 0
+
+    def create(self, number):
+
+        self.config(
+            width=self.CANVAS_INDENT*(number+3),
+            height=self.CANVAS_INDENT*(number+3)
+            )
+
+        self._create_heders(number)
+
+        self.fields = dict()
+        for i in xrange(number):
+            for j in xrange(number):
+                if i == j:
+                    def_text = '1'
+                else:
+                    def_text = '0'
+
+                self.fields[(i, j)] = self.create_text(
+                    self.CANVAS_INDENT*(j+2),
+                    self.CANVAS_INDENT*(i+2),
+                    text=def_text
+                    )
+
+    def _create_heders(self, number):
+        self.header = dict()
+
+        for x in xrange(number):
+            if number == CUSTOM_LEN:
+                name = ELEMENTS_NAME[x]
+            else:
+                name = str(x)
+
+            self.create_text(
+                self.CANVAS_INDENT*(x+2),
+                self.CANVAS_INDENT*(1),
+                text=name
+                )
+            self.create_text(
+                self.CANVAS_INDENT*(1),
+                self.CANVAS_INDENT*(x+2),
+                text=name
+                )
+
+
+    def refresh(self, update):
+        for item in update.items():
+            one = self.fields[item[0]]
+            two = self.fields[(item[0][1], item[0][0])]
+
+            self._change_text(one, item[1], 1)
+            self._change_text(two, item[1], 1)
+
+    def _change_text(self, widget, text, trim_len=TRIM_LEN):
+        self.itemconfig(
+            widget,
+            text=self.TRIM_FLOAT.format(text, trim_len)
+            )
+
+    def clear(self):
+        self.delete("all")
+
+        self.fields = dict()
 
 
 class MatrixFrame(tk.Frame):
@@ -244,7 +331,7 @@ class MatrixFrame(tk.Frame):
 
         self.node_number = 0
 
-    def create_table(self, number):
+    def create(self, number):
 
         self._craete_headers(number)
 
@@ -457,7 +544,8 @@ class Window(tk.Tk):
 
     def _init_table(self, frame):
         frame.widgets = dict()
-        frame.widgets["table"] = MatrixFrame(frame)
+        # frame.widgets["table"] = MatrixFrame(frame)
+        frame.widgets["table"] = TableCanvas(frame)
 
         self.table = frame.widgets["table"]
 
@@ -595,17 +683,19 @@ class Presenter(object):
         """ calculate some data package (one iteration) """
         full_dict = self.model.calculate_loop()
         if full_dict and self.run_state:
-            if full_dict["keys"] != self.view.can.node_number:
-                self.view.can.node_number = full_dict["keys"]
-                self.view.clear_graph()
-                self.view.draw_graph(full_dict["keys"])
+            self._check_refresh(self.view.can, full_dict["keys"])
+            # if full_dict["keys"] != self.view.can.node_number:
+            #     self.view.can.node_number = full_dict["keys"]
+            #     self.view.can.clear()
+            #     self.view.can.create(full_dict["keys"])
 
-            if full_dict["keys"] != self.view.table.node_number:
-                self.view.table.node_number = full_dict["keys"]
-                self.view.table.clear()
-                self.view.table.create_table(full_dict["keys"])
+            self._check_refresh(self.view.table, full_dict["keys"])
+            # if full_dict["keys"] != self.view.table.node_number:
+            #     self.view.table.node_number = full_dict["keys"]
+            #     self.view.table.clear()
+            #     self.view.table.create(full_dict["keys"])
 
-            self.view.renew_colors(full_dict["kfs"])
+            self.view.can.refresh(full_dict["kfs"])
             self.view.table.refresh(full_dict["kfs"])
 
             self.view.after_idle(self.calculate_loop)
@@ -616,6 +706,12 @@ class Presenter(object):
     def stop_spearman(self):
         """ stop calculation """
         self.model.stop_spearman()
+
+    def _check_refresh(self, widget, number):
+        if number != widget.node_number:
+            widget.node_number = number
+            widget.clear()
+            widget.create(number)
 
 
 def main():
