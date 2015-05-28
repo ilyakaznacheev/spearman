@@ -12,6 +12,7 @@ from spearman import Model
 tk.Entry.default = ""
 
 FONT = ("Arial", 12)
+CUSTOM_LEN = 29
 
 ELEMENTS_NAME = {
     0: "FP1",
@@ -72,7 +73,7 @@ class GraphCanvas(tk.Canvas):
     CANVAS_BG_COLOR = "white"
     SMALL_RADIUS = 15
     CONTRA_RADIUS = 30
-    CUSTOM_LEN = 29
+    # CUSTOM_LEN = 29
     RGB_MASK = "#{red:02X}{green:02X}{blue:02X}"
 
     def __init__(
@@ -176,7 +177,7 @@ class GraphCanvas(tk.Canvas):
         for item in self.coords.items():
             self._draw_named_circle(
                 *item[1], name=item[0], radius=radius,
-                custom_name=bool(len(self.coords) == self.CUSTOM_LEN)
+                custom_name=bool(len(self.coords) == CUSTOM_LEN)
                 )
 
     def _draw_named_circle(
@@ -233,6 +234,76 @@ class GraphCanvas(tk.Canvas):
         self.lines = dict()
 
 
+class MatrixFrame(tk.Frame):
+    """docstring for MatrixFrame"""
+    TRIM_FLOAT = "{0:.{1}f}"
+    TRIM_LEN = 3
+
+    def __init__(self, frame):
+        tk.Frame.__init__(self, frame)
+
+        self.node_number = 0
+
+    def create_table(self, number):
+
+        self._craete_headers(number)
+
+        self.vars = dict()
+        for i in xrange(number):
+            for j in xrange(i, number):
+                self.vars[(i, j)] = tk.StringVar()
+
+        self.fields = dict()
+        for i in xrange(number):
+            for j in xrange(number):
+                index = (min(i, j), max(i, j))
+                self.fields[(i, j)] = tk.Label(
+                    self, textvariable=self.vars[index],
+                    width=self.TRIM_LEN+2, bg="white"
+                    )
+                self.fields[(i, j)].grid(
+                    row=i+1, column=j+1, sticky=tk.EW
+                    )
+
+        for i in xrange(number):
+            self.vars[(i, i)].set('1')
+
+    def _craete_headers(self, number):
+        self.header = dict()
+        self.header[(0, 0)] = tk.Label(self, text='')
+
+        for x in xrange(number):
+            if number == CUSTOM_LEN:
+                name = ELEMENTS_NAME[x]
+            else:
+                name = str(x)
+
+            self.header[(0, x+1)] = tk.Label(
+                self, text=name, width=self.TRIM_LEN+2, bg="white"
+                )
+            self.header[(0, x+1)].grid(row=0, column=x+1, sticky=tk.EW)
+
+            self.header[(x+1, 0)] = tk.Label(
+                self, text=name, width=self.TRIM_LEN+2, bg="white"
+                )
+            self.header[(x+1, 0)].grid(row=x+1, column=0, sticky=tk.EW)
+
+    def refresh(self, update):
+        for item in update.items():
+            self.vars[item[0]].set(
+                self.TRIM_FLOAT.format(item[1], self.TRIM_LEN)
+                )
+
+    def clear(self):
+        # for entry in self.header.
+        for entry in self.grid_slaves():
+            entry.grid_forget()
+
+        self.header = dict()
+        self.vars = dict()
+        self.fields = dict()
+
+
 class Window(tk.Tk):
     """Main GUI window class"""
     WIDTH_MENU = 50
@@ -255,12 +326,16 @@ class Window(tk.Tk):
         self.menu_frame = tk.Frame(self.pan)
         self.pan.add(self.menu_frame)
 
-        self.canvas_frame = tk.Frame(self.pan)
-        self.pan.add(self.canvas_frame)
+        # self.canvas_frame = tk.Frame(self.pan)
+        # self.pan.add(self.canvas_frame)
+
+        self.visual_frame = tk.Frame(self.pan)
+        self.pan.add(self.visual_frame)
 
         """ status_frame will be added while event called """
         self.status_frame = tk.Frame(self.vpan)
 
+        """ menu tabs """
         self.note = ttk.Notebook(self.menu_frame)
         self.note.pack()
 
@@ -271,11 +346,23 @@ class Window(tk.Tk):
         self.tabs["file"] = MenuFrame(self.note)
         self.note.add(self.tabs["file"], text="File")
 
+        """ visualisation tabs """
+        self.visual_note = ttk.Notebook(self.visual_frame)
+        self.visual_note.pack()
+
+        self.visual_tabs = dict()
+        self.visual_tabs["canvas"] = tk.Frame(self.visual_note)
+        self.visual_note.add(self.visual_tabs["canvas"], text="Graph")
+
+        self.visual_tabs["table"] = tk.Frame(self.visual_note)
+        self.visual_note.add(self.visual_tabs["table"], text="Matrix")
+
         """ init widgets """
         self._init_net_menu(self.tabs["net"])
         self._init_file_menu(self.tabs["file"])
         self._init_buttons(self.menu_frame)
-        self._init_canvas(self.canvas_frame, head=False)
+        self._init_canvas(self.visual_tabs["canvas"], head=False)
+        self._init_table(self.visual_tabs["table"])
         self._init_stat_bar(self.status_frame)
 
     def _init_net_menu(self, frame):
@@ -366,7 +453,15 @@ class Window(tk.Tk):
 
         self.can = frame.widgets["can"]
 
-        self.can.pack(fill=tk.BOTH, expand=1)
+        self.can.pack(expand=0)
+
+    def _init_table(self, frame):
+        frame.widgets = dict()
+        frame.widgets["table"] = MatrixFrame(frame)
+
+        self.table = frame.widgets["table"]
+
+        self.table.pack(fill=tk.BOTH, expand=1)
 
     def _init_stat_bar(self, frame):
         frame.widgets = dict()
@@ -505,7 +600,13 @@ class Presenter(object):
                 self.view.clear_graph()
                 self.view.draw_graph(full_dict["keys"])
 
+            if full_dict["keys"] != self.view.table.node_number:
+                self.view.table.node_number = full_dict["keys"]
+                self.view.table.clear()
+                self.view.table.create_table(full_dict["keys"])
+
             self.view.renew_colors(full_dict["kfs"])
+            self.view.table.refresh(full_dict["kfs"])
 
             self.view.after_idle(self.calculate_loop)
 
