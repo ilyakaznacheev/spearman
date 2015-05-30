@@ -20,6 +20,7 @@ else:
     EMULATE_MOD = False
 
 import lib
+import datamanagers as dm
 
 
 class Model(object):
@@ -42,22 +43,22 @@ class Model(object):
         self.core.set_global(int(kwargs["entry_frame"]))
 
         if mode == self.MODE_NET:
-            self.reader = lib.AsyncReader()
+            self.reader = dm.AsyncReader()
         elif mode == self.MODE_FILE:
-            self.reader = lib.FileReader()
+            self.reader = dm.FileReader()
 
         status = self.reader.start(**kwargs)
 
         return status
 
     def calculate_loop(self):
-        raw_data = self.reader.get()
+        raw_data, discr = self.reader.get()
         if raw_data:
             sorted_list = self.core.make_full_list(raw_data)
             full_dict = self._cuda_processing(sorted_list)
-            return full_dict
+            return full_dict, discr
         else:
-            return None
+            return None, discr
 
     def stop_spearman(self):
         self.reader.stop()

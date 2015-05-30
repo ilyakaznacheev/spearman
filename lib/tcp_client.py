@@ -7,8 +7,6 @@ import multiprocessing as mp
 
 import errors
 
-# FRAME_TIME_MASK = "h"*8
-
 COMMAND_CONNECT = "connect"
 COMMAND_REGISTER = "register"
 COMMAND_DISCONNECT = "disconnect"
@@ -193,6 +191,8 @@ class SpearmanSocketListener(object):
         self.tcp_client = TCPCLient(host, port)
         self.formatter = HEXFormatter()
         self.que = Queue()
+        # self.dque = Queue()
+        self.discr = 0
 
     def connect(self):
         return self.tcp_client.connect()
@@ -222,7 +222,8 @@ class SpearmanSocketListener(object):
         time_begin = self.formatter.decode_str(self.TIME_MASK, raw_data[4:20])
         time_end = self.formatter.decode_str(self.TIME_MASK, raw_data[20:36])
         # reserved = raw_data[36:64]
-        discret_friq = raw_data[64:68]
+        discret_friq = self.formatter.decode_str('i', raw_data[64:68])
+        # discret_friq = self.formatter.decode_str('f', raw_data[36:40])
         message = raw_data[68:]
         msg_len_needed = self.ARRAYS_NUMBER*self.ARRAY_ELEMENTS*2
 
@@ -233,6 +234,14 @@ class SpearmanSocketListener(object):
 
         arrays = list(self._chunks(raw_array, self.ARRAY_ELEMENTS))
         transponated = zip(*arrays)
+        # print("reserved...")
+        # for x in xrange(len(reserved)/2):
+        #     # zug = reserved[4*x:4+4*x]
+        #     zug = reserved[2*x:2+2*x]
+        #     print(self.formatter.decode_str('h', zug))
+        # print("\nbegin:\t{}\nend:\t{}\ndiscr:\t{}".format(
+        #     time_begin, time_end, discret_friq
+        #     ))
         return transponated, time_begin, time_end, discret_friq
 
     def _chunks(self, l, n):
@@ -256,16 +265,24 @@ class SpearmanSocketListener(object):
         """ add new lines from received packages """
         while True:
             try:
-                result = self.read_frame()[0]
+                data, begin, end, discr = self.read_frame()
             except errors.TCPErrorBrokenPackage:
                 pass
             except errors.TCPErrorServerDisconnect:
-                result = [None]
+                data = [None]
+                discr = None
                 break
             else:
                 break
-        for line in result:
+
+        if self.discr != discr:
+            self.discr = discr
+
+        for line in data:
             self.que.put(line)
+
+    def get_discr(self):
+        return self.discr
 
 
 class AsyncManager(object):
@@ -278,16 +295,20 @@ class AsyncManager(object):
     - disconnect - disconnect from remote server
     """
     OWERFLOW_RATE = 100
+    # DEFAULT_DISCR = 1000
 
     def __init__(self, host, port, window=10, owerflow_rate=OWERFLOW_RATE):
         self.window = window
         self.owerflow_limit = window * owerflow_rate
         self.command_que = mp.Queue()
         self.data_que = mp.Queue()
+        self.discr_que = mp.Queue()
         self.tcp_client = AsyncSocketListener(
-            self.command_que, self.data_que,
+            self.command_que, self.data_que, self.discr_que,
             (host, port)
             )
+        self.discr = 0
+        # self.discr = self.DEFAULT_DISCR
 
     def connect(self):
         self.tcp_client.start()
@@ -304,7 +325,9 @@ class AsyncManager(object):
 
     def get(self):
         step = self.data_que.qsize()/self.owerflow_limit
-        return self._get(self.window, step)
+        data = self._get(self.window, step)
+        discr = self._get_actual_discr(step)
+        return data, discr
 
     def _get(self, number, step):
         """ receive <number> lines from tcp connection"""
@@ -326,16 +349,38 @@ class AsyncManager(object):
         else:
             return result
 
+    def _get_discr(self):
+        try:
+            discr = self.discr_que.get_nowait()
+        except QueueEmpty:
+            return self.discr
+        else:
+            if discr:
+                self.discr = discr
+            return self.discr
+
+    def _get_actual_discr(self, step):
+        discr = self._get_discr()
+        actual = discr/(step+1)
+        return actual
+
+    # def _fill_discr(self):
+    #     discr = self._get_discr()
+    #     if discr:
+    #         self.discr = discr
+
 
 class AsyncSocketListener(mp.Process):
     """Asyncronous Socket Listener"""
 
-    def __init__(self, command_que, data_que, socket):
+    def __init__(self, command_que, data_que, discr_que, socket):
         mp.Process.__init__(self)
         self.command_que = command_que
         self.data_que = data_que
+        self.discr_que = discr_que
         self.socket = socket
         self.next = False
+        self.discr = None
 
     def run(self):
         """ main command listening loop """
@@ -383,6 +428,12 @@ class AsyncSocketListener(mp.Process):
         """
         result = self.tcp_client.get()
         self.data_que.put(result)
+
+    def _put_discr(self):
+        discr = self.tcp_client.get_discr()
+        if discr != self.discr:
+            self.discr = discr
+            self.discr_que.put(self.discr)
 
 
 def main():

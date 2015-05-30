@@ -5,6 +5,7 @@ import Tkinter as tk
 import tkMessageBox as tkmb
 import ttk
 import math
+# import time
 
 from spearman import Model
 
@@ -300,7 +301,6 @@ class TableCanvas(tk.Canvas):
                 text=name
                 )
 
-
     def refresh(self, update):
         for item in update.items():
             one = self.fields[item[0]]
@@ -382,7 +382,6 @@ class MatrixFrame(tk.Frame):
                 )
 
     def clear(self):
-        # for entry in self.header.
         for entry in self.grid_slaves():
             entry.grid_forget()
 
@@ -413,9 +412,6 @@ class Window(tk.Tk):
         self.menu_frame = tk.Frame(self.pan)
         self.pan.add(self.menu_frame)
 
-        # self.canvas_frame = tk.Frame(self.pan)
-        # self.pan.add(self.canvas_frame)
-
         self.visual_frame = tk.Frame(self.pan)
         self.pan.add(self.visual_frame)
 
@@ -438,18 +434,18 @@ class Window(tk.Tk):
         self.visual_note.pack()
 
         self.visual_tabs = dict()
-        self.visual_tabs["canvas"] = tk.Frame(self.visual_note)
-        self.visual_note.add(self.visual_tabs["canvas"], text="Graph")
+        self.visual_tabs["graph"] = tk.Frame(self.visual_note)
+        self.visual_note.add(self.visual_tabs["graph"], text="Graph")
 
-        self.visual_tabs["table"] = tk.Frame(self.visual_note)
-        self.visual_note.add(self.visual_tabs["table"], text="Matrix")
+        self.visual_tabs["matrix"] = tk.Frame(self.visual_note)
+        self.visual_note.add(self.visual_tabs["matrix"], text="Matrix")
 
         """ init widgets """
         self._init_net_menu(self.tabs["net"])
         self._init_file_menu(self.tabs["file"])
         self._init_buttons(self.menu_frame)
-        self._init_canvas(self.visual_tabs["canvas"], head=False)
-        self._init_table(self.visual_tabs["table"])
+        self._init_canvas(self.visual_tabs["graph"], head=False)
+        self._init_table(self.visual_tabs["matrix"])
         self._init_stat_bar(self.status_frame)
 
     def _init_net_menu(self, frame):
@@ -560,15 +556,6 @@ class Window(tk.Tk):
         self.status_lable = frame.widgets["label"]
         self.status_lable.grid(sticky=tk.W)
 
-    def draw_graph(self, number, center=None):
-        self.can.draw_graph(number, center)
-
-    def renew_colors(self, update):
-        self.can.renew_colors(update)
-
-    def clear_graph(self):
-        self.can.clear_graph()
-
     def event_start(self, event):
         self.fields_down()
 
@@ -576,29 +563,29 @@ class Window(tk.Tk):
         self.fields_up()
 
     def fields_down(self):
-        current_tab = self._get_current_tab()
+        current_tab = self._get_current_tab(self.tabs, self.note)
         for widget in current_tab.widgets.values():
             widget.config(state=tk.DISABLED)
         self.btn_start.pack_forget()
         self.btn_stop.pack(fill=tk.X)
 
     def fields_up(self):
-        current_tab = self._get_current_tab()
+        current_tab = self._get_current_tab(self.tabs, self.note)
         for widget in current_tab.widgets.values():
             widget.config(state=tk.NORMAL)
         self.btn_stop.pack_forget()
         self.btn_start.pack(fill=tk.X)
 
     def get_fields(self):
-        current_tab = self._get_current_tab()
+        current_tab = self._get_current_tab(self.tabs, self.note)
         fields = current_tab.get_fields()
         return fields
 
-    def _get_current_tab(self):
-        return self.tabs.get(self.get_current_tab_name())
+    def _get_current_tab(self, tab_dict, parent):
+        return tab_dict.get(self.get_current_tab_name(parent))
 
-    def get_current_tab_name(self):
-        return self.note.tab(self.note.select(), "text").lower()
+    def get_current_tab_name(self, parent):
+        return parent.tab(parent.select(), "text").lower()
 
     def msg_info(self, message, title="Info"):
         tkmb.showinfo(title=title, message=message)
@@ -620,11 +607,13 @@ class Window(tk.Tk):
 
 class Presenter(object):
     """Processing presenter"""
+    TABLE_REFRESH = 2
 
     def __init__(self):
         self.view = Window()
         self.model = Model()
         self.run_state = None
+        self.refresh_iter = 0
 
         self._bind_view_events()
 
@@ -644,6 +633,7 @@ class Presenter(object):
 
         self.view.event_start(event)
         self.run_state = True
+        self.refresh_iter = 0
         print("event start")
 
         start = self.start_spearman()
@@ -672,7 +662,7 @@ class Presenter(object):
         fields = self.view.get_fields()
         """ start calculation with input fields data """
         result = self.model.start_spearman(
-            self.view.get_current_tab_name(),
+            self.view.get_current_tab_name(self.view.note),
             **fields
             )
         if not result:
@@ -681,22 +671,20 @@ class Presenter(object):
 
     def calculate_loop(self):
         """ calculate some data package (one iteration) """
-        full_dict = self.model.calculate_loop()
+        full_dict, discr = self.model.calculate_loop()
         if full_dict and self.run_state:
-            self._check_refresh(self.view.can, full_dict["keys"])
-            # if full_dict["keys"] != self.view.can.node_number:
-            #     self.view.can.node_number = full_dict["keys"]
-            #     self.view.can.clear()
-            #     self.view.can.create(full_dict["keys"])
-
-            self._check_refresh(self.view.table, full_dict["keys"])
-            # if full_dict["keys"] != self.view.table.node_number:
-            #     self.view.table.node_number = full_dict["keys"]
-            #     self.view.table.clear()
-            #     self.view.table.create(full_dict["keys"])
-
-            self.view.can.refresh(full_dict["kfs"])
-            self.view.table.refresh(full_dict["kfs"])
+            visual_tab_name = self.view.get_current_tab_name(
+                self.view.visual_note
+                )
+            if visual_tab_name == 'graph':
+                self._check_refresh(
+                    self.view.can, full_dict["keys"], full_dict["kfs"]
+                    )
+            else:
+                # self._check_refresh(self.view.table, full_dict["keys"], full_dict["kfs"])
+                self._refresh_table(
+                    self.view.table, full_dict["keys"], full_dict["kfs"], discr
+                    )
 
             self.view.after_idle(self.calculate_loop)
 
@@ -707,11 +695,26 @@ class Presenter(object):
         """ stop calculation """
         self.model.stop_spearman()
 
-    def _check_refresh(self, widget, number):
+    def _check_refresh(self, widget, number, data):
         if number != widget.node_number:
             widget.node_number = number
             widget.clear()
             widget.create(number)
+        widget.refresh(data)
+
+    def _refresh_table(self, widget, number, data, discr):
+        refrash_fr = discr/self.TABLE_REFRESH
+
+        if not self.refresh_iter:
+            print("\nRefresh!")
+            self._check_refresh(widget, number, data)
+            # time.sleep(0.1)
+
+        if self.refresh_iter < refrash_fr:
+            self.refresh_iter += 1
+        else:
+            self.refresh_iter = 0
+        print("\niter:{}\tmax:{}".format(self.refresh_iter, refrash_fr))
 
 
 def main():
