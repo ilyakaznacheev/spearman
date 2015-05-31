@@ -118,8 +118,8 @@ class TCPCLient(object):
             self.disconnect()
             raise errors.TCPErrorServerDisconnect()
         elif command == self.POLL:
-            time.sleep(0.1)
-            # pass
+            # time.sleep(0.1)
+            pass
         elif command == 1:
             self._add_client(data[4:])
         elif command == -1:

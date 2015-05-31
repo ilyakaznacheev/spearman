@@ -238,7 +238,7 @@ class GraphCanvas(tk.Canvas):
 class TableCanvas(tk.Canvas):
     """Correlation Table Canvas"""
     CANVAS_SIZE = 800
-    CANVAS_INDENT = 20
+    CANVAS_INDENT = 25
     CANVAS_BG_COLOR = "white"
     TRIM_FLOAT = "{0:.{1}f}"
     TRIM_LEN = 2
@@ -402,7 +402,7 @@ class Window(tk.Tk):
         self._init_widgets()
 
     def _init_widgets(self):
-        """ init cintainer widgets """
+        """ init container widgets """
         self.vpan = tk.PanedWindow(self, orient=tk.VERTICAL)
         self.vpan.pack(fill=tk.BOTH, expand=1)
 
@@ -412,8 +412,11 @@ class Window(tk.Tk):
         self.menu_frame = tk.Frame(self.pan)
         self.pan.add(self.menu_frame)
 
-        self.visual_frame = tk.Frame(self.pan)
-        self.pan.add(self.visual_frame)
+        self.graph = tk.Frame(self.pan)
+        self.pan.add(self.graph)
+
+        self.matrix = tk.Frame(self.pan)
+        self.pan.add(self.matrix)
 
         """ status_frame will be added while event called """
         self.status_frame = tk.Frame(self.vpan)
@@ -422,30 +425,19 @@ class Window(tk.Tk):
         self.note = ttk.Notebook(self.menu_frame)
         self.note.pack()
 
-        self.tabs = dict()
-        self.tabs["net"] = MenuFrame(self.note)
-        self.note.add(self.tabs["net"], text="Net")
+        self.note.tabs = dict()
+        self.note.tabs["net"] = MenuFrame(self.note)
+        self.note.add(self.note.tabs["net"], text="Net")
 
-        self.tabs["file"] = MenuFrame(self.note)
-        self.note.add(self.tabs["file"], text="File")
-
-        """ visualisation tabs """
-        self.visual_note = ttk.Notebook(self.visual_frame)
-        self.visual_note.pack()
-
-        self.visual_tabs = dict()
-        self.visual_tabs["graph"] = tk.Frame(self.visual_note)
-        self.visual_note.add(self.visual_tabs["graph"], text="Graph")
-
-        self.visual_tabs["matrix"] = tk.Frame(self.visual_note)
-        self.visual_note.add(self.visual_tabs["matrix"], text="Matrix")
+        self.note.tabs["file"] = MenuFrame(self.note)
+        self.note.add(self.note.tabs["file"], text="File")
 
         """ init widgets """
-        self._init_net_menu(self.tabs["net"])
-        self._init_file_menu(self.tabs["file"])
+        self._init_net_menu(self.note.tabs["net"])
+        self._init_file_menu(self.note.tabs["file"])
         self._init_buttons(self.menu_frame)
-        self._init_canvas(self.visual_tabs["graph"], head=False)
-        self._init_table(self.visual_tabs["matrix"])
+        self._init_canvas(self.graph, head=False)
+        self._init_table(self.matrix, width=10)
         self._init_stat_bar(self.status_frame)
 
     def _init_net_menu(self, frame):
@@ -530,18 +522,19 @@ class Window(tk.Tk):
     def _init_canvas(self, frame, **kwargs):
         frame.widgets = dict()
         frame.widgets["can"] = GraphCanvas(
-            frame,
-            **kwargs
+            frame, **kwargs
             )
 
         self.can = frame.widgets["can"]
 
-        self.can.pack(expand=0)
+        self.can.pack(fill=tk.BOTH, expand=1)
 
-    def _init_table(self, frame):
+    def _init_table(self, frame, **kwargs):
         frame.widgets = dict()
         # frame.widgets["table"] = MatrixFrame(frame)
-        frame.widgets["table"] = TableCanvas(frame)
+        frame.widgets["table"] = TableCanvas(
+            frame, **kwargs
+            )
 
         self.table = frame.widgets["table"]
 
@@ -563,26 +556,26 @@ class Window(tk.Tk):
         self.fields_up()
 
     def fields_down(self):
-        current_tab = self._get_current_tab(self.tabs, self.note)
+        current_tab = self._get_current_tab(self.note)
         for widget in current_tab.widgets.values():
             widget.config(state=tk.DISABLED)
         self.btn_start.pack_forget()
         self.btn_stop.pack(fill=tk.X)
 
     def fields_up(self):
-        current_tab = self._get_current_tab(self.tabs, self.note)
+        current_tab = self._get_current_tab(self.note)
         for widget in current_tab.widgets.values():
             widget.config(state=tk.NORMAL)
         self.btn_stop.pack_forget()
         self.btn_start.pack(fill=tk.X)
 
     def get_fields(self):
-        current_tab = self._get_current_tab(self.tabs, self.note)
+        current_tab = self._get_current_tab(self.note)
         fields = current_tab.get_fields()
         return fields
 
-    def _get_current_tab(self, tab_dict, parent):
-        return tab_dict.get(self.get_current_tab_name(parent))
+    def _get_current_tab(self, parent):
+        return parent.tabs.get(self.get_current_tab_name(parent))
 
     def get_current_tab_name(self, parent):
         return parent.tab(parent.select(), "text").lower()
@@ -673,18 +666,24 @@ class Presenter(object):
         """ calculate some data package (one iteration) """
         full_dict, discr = self.model.calculate_loop()
         if full_dict and self.run_state:
-            visual_tab_name = self.view.get_current_tab_name(
-                self.view.visual_note
+            # visual_tab_name = self.view.get_current_tab_name(
+            #     self.view.visual_note
+            #     )
+            # if visual_tab_name == 'graph':
+            #     self._check_refresh(
+            #         self.view.can, full_dict["keys"], full_dict["kfs"]
+            #         )
+            # else:
+            #     # self._check_refresh(self.view.table, full_dict["keys"], full_dict["kfs"])
+            #     self._refresh_table(
+            #         self.view.table, full_dict["keys"], full_dict["kfs"], discr
+            #         )
+            self._check_refresh(
+                self.view.can, full_dict["keys"], full_dict["kfs"]
                 )
-            if visual_tab_name == 'graph':
-                self._check_refresh(
-                    self.view.can, full_dict["keys"], full_dict["kfs"]
-                    )
-            else:
-                # self._check_refresh(self.view.table, full_dict["keys"], full_dict["kfs"])
-                self._refresh_table(
-                    self.view.table, full_dict["keys"], full_dict["kfs"], discr
-                    )
+            self._refresh_table(
+                self.view.table, full_dict["keys"], full_dict["kfs"], discr
+                )
 
             self.view.after_idle(self.calculate_loop)
 
@@ -706,15 +705,12 @@ class Presenter(object):
         refrash_fr = discr/self.TABLE_REFRESH
 
         if not self.refresh_iter:
-            print("\nRefresh!")
             self._check_refresh(widget, number, data)
-            # time.sleep(0.1)
 
         if self.refresh_iter < refrash_fr:
             self.refresh_iter += 1
         else:
             self.refresh_iter = 0
-        print("\niter:{}\tmax:{}".format(self.refresh_iter, refrash_fr))
 
 
 def main():
