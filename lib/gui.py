@@ -196,7 +196,7 @@ class GraphCanvas(tk.Canvas):
         self._draw_edges()
 
         """ draw graph nodes """
-        self._draw_nodes(small_radius)
+        self._draw_nodes(small_radius, number)
 
     def _draw_edges(self):
         """ draw graph edges """
@@ -211,12 +211,12 @@ class GraphCanvas(tk.Canvas):
                     fill="blue", width=1
                     )
 
-    def _draw_nodes(self, radius):
+    def _draw_nodes(self, radius, number):
         """ draw graph nodes """
         for item in self.coords.items():
             self._draw_named_circle(
                 *item[1], name=item[0], radius=radius,
-                custom_name=bool(len(self.coords) == CUSTOM_LEN)
+                custom_name=bool(number == CUSTOM_LEN)
                 )
 
     def _draw_named_circle(

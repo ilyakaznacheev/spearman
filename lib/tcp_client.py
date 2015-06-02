@@ -63,11 +63,6 @@ class TCPCLient(object):
     def get_next(self):
         """ receive and prepare next data package """
         while True:
-            """ if something is wrong with tcp... """
-            # try:
-            #     rcv = self._receive()
-            # except:
-            #     continue
             rcv = self._receive()
             result = self._deal_with_recv_data(rcv)
             if result:
