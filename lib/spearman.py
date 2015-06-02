@@ -2,7 +2,7 @@
 import sys
 import math
 
-__version__ = "0.3"
+__version__ = "0.3.1"
 __author__ = "Ilya Kaznacheev"
 
 """

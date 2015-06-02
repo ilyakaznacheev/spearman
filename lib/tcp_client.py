@@ -223,7 +223,6 @@ class SpearmanSocketListener(object):
         time_end = self.formatter.decode_str(self.TIME_MASK, raw_data[20:36])
         # reserved = raw_data[36:64]
         discret_friq = self.formatter.decode_str('i', raw_data[64:68])
-        # discret_friq = self.formatter.decode_str('f', raw_data[36:40])
         message = raw_data[68:]
         msg_len_needed = self.ARRAYS_NUMBER*self.ARRAY_ELEMENTS*2
 
@@ -417,6 +416,7 @@ class AsyncSocketListener(mp.Process):
         return True
 
     def _disconnect(self):
+        self.data_que.put(None)
         self.tcp_client.disconnect()
         self.next = False
         return False
