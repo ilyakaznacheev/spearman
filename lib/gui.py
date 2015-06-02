@@ -5,11 +5,9 @@ import Tkinter as tk
 import tkMessageBox as tkmb
 import ttk
 import math
-# import time
 
 from spearman import Model
 
-# tk.Widget.widgets = dict()
 tk.Entry.default = ""
 
 FONT = ("Arial", 12)
@@ -49,7 +47,7 @@ ELEMENTS_NAME = {
 
 
 class MenuFrame(tk.Frame):
-    """ custom Frame"""
+    """ custom Frame """
     def __init__(self, *args, **kwargs):
         tk.Frame.__init__(self, *args, **kwargs)
 
@@ -67,6 +65,41 @@ class MenuFrame(tk.Frame):
         return fields
 
 
+class SelectFrame(tk.Frame):
+    """ Frame with node selection parameters"""
+    def __init__(self, *args, **kwargs):
+        tk.Frame.__init__(self, *args, **kwargs)
+        self.buttons = dict()
+        self.node_number = 0
+
+    def create(self, number, excludion=[]):
+        self.node_number = number
+
+        for x in xrange(number):
+            if number == CUSTOM_LEN:
+                name = ELEMENTS_NAME[x]
+            else:
+                name = str(x)
+
+            var = tk.BooleanVar()
+            var.set(True)
+            self.buttons[x] = tk.Checkbutton(
+                self, text=name, font=FONT, indicatoron=0
+                )
+            self.buttons[x].bind("<Button-1>", self.event_pushbutton)
+            self.buttons[x].item_num = x
+            self.buttons[x].item_state = var
+            self.buttons[x].pack(fill=tk.X)
+
+    def clear(self):
+        for entry in self.pack_slaves():
+            entry.pack_forget()
+
+    def event_pushbutton(self, event):
+        event.widget.item_state.set(not event.widget.item_state.get())
+        self.event_generate("<<Select>>")
+
+
 class GraphCanvas(tk.Canvas):
     """Correlation Graph Canvas"""
     CANVAS_SIZE = 800
@@ -74,7 +107,6 @@ class GraphCanvas(tk.Canvas):
     CANVAS_BG_COLOR = "white"
     SMALL_RADIUS = 15
     CONTRA_RADIUS = 30
-    # CUSTOM_LEN = 29
     RGB_MASK = "#{red:02X}{green:02X}{blue:02X}"
 
     def __init__(
@@ -128,23 +160,28 @@ class GraphCanvas(tk.Canvas):
             width=0, fill="blue"
             )
 
-    def create(self, number, center=None):
+    def create(self, number, center=None, excludion=[]):
         """ draw relation graph """
+
+        self.node_number = number
+        show_number = number - len(excludion)
 
         """ draw human head slice """
         if self.head:
             self.draw_headfield()
 
-        angle = 360/number
+        angle = 360/show_number
         radius = (self.CANVAS_SIZE)//2-self.CANVAS_INDENT-self.CONTRA_RADIUS
-        small_radius = ((2*math.pi*radius)/number)*0.4
+        small_radius = ((2*math.pi*radius)/show_number)*0.4
 
         if small_radius >= self.CONTRA_RADIUS-10:
             small_radius = self.CONTRA_RADIUS-10
 
         if not center:
             center = [self.CANVAS_SIZE//2]*2
-        self.coords = dict.fromkeys(range(number))
+
+        gen_range = [x for x in range(number) if x not in excludion]
+        self.coords = dict.fromkeys(gen_range)
 
         """ calculate coordinates of all circles """
         for index, item in enumerate(self.coords):
@@ -159,26 +196,27 @@ class GraphCanvas(tk.Canvas):
         self._draw_edges()
 
         """ draw graph nodes """
-        self._draw_nodes(small_radius)
+        self._draw_nodes(small_radius, number)
 
     def _draw_edges(self):
         """ draw graph edges """
         circles = self.coords.keys()
-        for x in circles:
-            for y in circles[x+1:]:
-                pair_coords = self.coords[x]+self.coords[y]
-
-                self.lines[(x, y)] = self.create_line(
+        circ_len = len(self.coords)
+        for x in xrange(circ_len):
+            for y in xrange(x+1, circ_len):
+                name_coords = (circles[x], circles[y])
+                pair_coords = self.coords[circles[x]]+self.coords[circles[y]]
+                self.lines[name_coords] = self.create_line(
                     *pair_coords,
                     fill="blue", width=1
                     )
 
-    def _draw_nodes(self, radius):
+    def _draw_nodes(self, radius, number):
         """ draw graph nodes """
         for item in self.coords.items():
             self._draw_named_circle(
                 *item[1], name=item[0], radius=radius,
-                custom_name=bool(len(self.coords) == CUSTOM_LEN)
+                custom_name=bool(number == CUSTOM_LEN)
                 )
 
     def _draw_named_circle(
@@ -214,8 +252,12 @@ class GraphCanvas(tk.Canvas):
 
     def refresh(self, update):
         for item in update.items():
+            try:
+                line = self.lines[item[0]]
+            except KeyError:
+                continue
             self.itemconfig(
-                self.lines[item[0]],
+                line,
                 fill=self.RGB_MASK.format(
                     red=int(255-255*item[1]),
                     green=int(255*item[1]),
@@ -225,9 +267,6 @@ class GraphCanvas(tk.Canvas):
 
     def clear(self):
         self.delete("all")
-        # map(self.delete, self.circles.values())
-        # map(self.delete, self.clables.values())
-        # map(self.delete, self.lines.values())
 
         self.item_coords = dict()
         self.circles = dict()
@@ -258,7 +297,8 @@ class TableCanvas(tk.Canvas):
 
         self.node_number = 0
 
-    def create(self, number):
+    def create(self, number, excludion=[]):
+        self.node_number = number
 
         self.config(
             width=self.CANVAS_INDENT*(number+3),
@@ -392,9 +432,7 @@ class MatrixFrame(tk.Frame):
 
 class Window(tk.Tk):
     """Main GUI window class"""
-    WIDTH_MENU = 50
     TITLE = "Spearman correlation"
-    ICON = r"./spearman.ico"
 
     def __init__(self):
         tk.Tk.__init__(self)
@@ -411,6 +449,9 @@ class Window(tk.Tk):
 
         self.menu_frame = tk.Frame(self.pan)
         self.pan.add(self.menu_frame)
+
+        self.select_frame = SelectFrame(self.pan, width=40)
+        self.pan.add(self.select_frame)
 
         self.graph = tk.Frame(self.pan)
         self.pan.add(self.graph)
@@ -607,6 +648,7 @@ class Presenter(object):
         self.model = Model()
         self.run_state = None
         self.refresh_iter = 0
+        self.excludion = list()
 
         self._bind_view_events()
 
@@ -619,6 +661,8 @@ class Presenter(object):
             "<Button-1>", self.event_stop
             )
         self.view.bind("<<Stop>>", self.event_stop)
+
+        self.view.select_frame.bind("<<Select>>", self.event_select)
 
     def event_start(self, event):
         """ Event: called when main
@@ -646,6 +690,26 @@ class Presenter(object):
 
         self.stop_spearman()
 
+    def event_select(self, event):
+        print("event select")
+        self._draw_selected_nodes()
+
+    def _draw_selected_nodes(self):
+        excludion = list()
+        for button in self.view.select_frame.buttons.values():
+            if not button.item_state.get():
+                excludion.append(button.item_num)
+        self.excludion = excludion
+
+        self._refresh_no_check(
+            self.view.can, self.key_array, self.val_array, excludion
+            )
+
+    def _refresh_no_check(self, widget, number, data, excludion):
+        widget.clear()
+        widget.create(number, excludion=excludion)
+        widget.refresh(data)
+
     def run(self):
         """ start gui event loop """
         self.view.mainloop()
@@ -666,24 +730,16 @@ class Presenter(object):
         """ calculate some data package (one iteration) """
         full_dict, discr = self.model.calculate_loop()
         if full_dict and self.run_state:
-            # visual_tab_name = self.view.get_current_tab_name(
-            #     self.view.visual_note
-            #     )
-            # if visual_tab_name == 'graph':
-            #     self._check_refresh(
-            #         self.view.can, full_dict["keys"], full_dict["kfs"]
-            #         )
-            # else:
-            #     # self._check_refresh(self.view.table, full_dict["keys"], full_dict["kfs"])
-            #     self._refresh_table(
-            #         self.view.table, full_dict["keys"], full_dict["kfs"], discr
-            #         )
+            self.key_array = full_dict["keys"]
+            self.val_array = full_dict["kfs"]
+
             self._check_refresh(
-                self.view.can, full_dict["keys"], full_dict["kfs"]
+                self.view.can, self.key_array, self.val_array
                 )
             self._refresh_table(
-                self.view.table, full_dict["keys"], full_dict["kfs"], discr
+                self.view.table, self.key_array, self.val_array, discr
                 )
+            self._check_create(self.view.select_frame, self.key_array)
 
             self.view.after_idle(self.calculate_loop)
 
@@ -695,11 +751,13 @@ class Presenter(object):
         self.model.stop_spearman()
 
     def _check_refresh(self, widget, number, data):
-        if number != widget.node_number:
-            widget.node_number = number
-            widget.clear()
-            widget.create(number)
+        self._check_create(widget, number)
         widget.refresh(data)
+
+    def _check_create(self, widget, number):
+        if number != widget.node_number:
+            widget.clear()
+            widget.create(number, excludion=self.excludion)
 
     def _refresh_table(self, widget, number, data, discr):
         refrash_fr = discr/self.TABLE_REFRESH
