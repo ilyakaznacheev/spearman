@@ -621,6 +621,7 @@ class Window(tk.Tk):
     def get_current_tab_name(self, parent):
         return parent.tab(parent.select(), "text").lower()
 
+    """ MESSAGES """
     def msg_info(self, message, title="Info"):
         tkmb.showinfo(title=title, message=message)
 
@@ -641,7 +642,8 @@ class Window(tk.Tk):
 
 class Presenter(object):
     """Processing presenter"""
-    TABLE_REFRESH = 2
+
+    TABLE_REFRESH_RATE = 1000
 
     def __init__(self):
         self.view = Window()
@@ -653,20 +655,17 @@ class Presenter(object):
         self._bind_view_events()
 
     def _bind_view_events(self):
-        self.view.btn_start.bind(
-            "<Button-1>", self.event_start
-            )
-
-        self.view.btn_stop.bind(
-            "<Button-1>", self.event_stop
-            )
+        """ bind events ans handlers """
+        self.view.btn_start.bind("<Button-1>", self.event_start)
+        self.view.btn_stop.bind("<Button-1>", self.event_stop)
         self.view.bind("<<Stop>>", self.event_stop)
-
         self.view.select_frame.bind("<<Select>>", self.event_select)
 
     def event_start(self, event):
-        """ Event: called when main
-            calculation loop starts """
+        """
+        Event: called when main
+        calculation loop starts
+        """
 
         self.view.event_start(event)
         self.run_state = True
@@ -681,8 +680,10 @@ class Presenter(object):
             self.view.event_generate("<<Stop>>")
 
     def event_stop(self, event):
-        """ Event: called when main
-            calculation loop ends """
+        """
+        Event: called when main
+        calculation loop ends
+        """
 
         self.view.event_stop(event)
         self.run_state = False
@@ -691,10 +692,15 @@ class Presenter(object):
         self.stop_spearman()
 
     def event_select(self, event):
+        """
+        Event: called when some node
+        is selected or unselected
+        """
         print("event select")
         self._draw_selected_nodes()
 
     def _draw_selected_nodes(self):
+        """ draw only selected graph nodes """
         excludion = list()
         for button in self.view.select_frame.buttons.values():
             if not button.item_state.get():
@@ -706,6 +712,7 @@ class Presenter(object):
             )
 
     def _refresh_no_check(self, widget, number, data, excludion):
+        """ refresh widget with no element number checks """
         widget.clear()
         widget.create(number, excludion=excludion)
         widget.refresh(data)
@@ -722,6 +729,9 @@ class Presenter(object):
             self.view.get_current_tab_name(self.view.note),
             **fields
             )
+
+        self.window = int(fields["entry_frame"])
+
         if not result:
             self.view.msg_error("Error while connecting")
         return result
@@ -751,21 +761,27 @@ class Presenter(object):
         self.model.stop_spearman()
 
     def _check_refresh(self, widget, number, data):
+        """ renew and redraw widget in case new number of elements """
         self._check_create(widget, number)
         widget.refresh(data)
 
     def _check_create(self, widget, number):
+        """ renew widget in case new number of elements """
         if number != widget.node_number:
             widget.clear()
             widget.create(number, excludion=self.excludion)
 
     def _refresh_table(self, widget, number, data, discr):
-        refrash_fr = discr/self.TABLE_REFRESH
+        """
+        refresh table only one time pro several iterations
+        to prevert gui overload
+        """
+        refresh_fr = self.TABLE_REFRESH_RATE//self.window
 
         if not self.refresh_iter:
             self._check_refresh(widget, number, data)
 
-        if self.refresh_iter < refrash_fr:
+        if self.refresh_iter < refresh_fr:
             self.refresh_iter += 1
         else:
             self.refresh_iter = 0
