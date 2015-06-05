@@ -255,7 +255,11 @@ class GraphCanvas(tk.Canvas):
             try:
                 line = self.lines[item[0]]
             except KeyError:
-                continue
+                try:
+                    """ try to assign to line with reverse key """
+                    line = self.lines[item[0][::-1]]
+                except KeyError:
+                    continue
             self.itemconfig(
                 line,
                 fill=self.RGB_MASK.format(
