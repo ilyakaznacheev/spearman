@@ -2,7 +2,7 @@
 import sys
 import math
 
-__version__ = "0.4.1"
+__version__ = "0.5"
 __author__ = "Ilya Kaznacheev"
 
 """
@@ -150,10 +150,6 @@ class CUDAEmulator(object):
 class Spearman(object):
     """ Computing Spearman korellation index
         based on cuda parallel computing """
-    FILE_NAME = "input.txt"
-
-    def __init__(self, file_name=FILE_NAME):
-        pass
 
     def set_global(self, window):
         """ set global variables """
@@ -171,15 +167,28 @@ class Spearman(object):
             for n, val in enumerate(line):
                 val_list[n].append(float(val))
 
-        return self.run_sorting(val_list)
+        return self.long_sorting(val_list)
 
-    def run_sorting(self, val_list):
-        """ calculate sorting indexes """
+    # def run_sorting(self, val_list):
+    #     """ calculate sorting indexes """
+    #     sorted_list = list()
+    #     for item in val_list:
+    #         sorted_list.append(
+    #             [i[0] for i in sorted(enumerate(item), key=lambda x:x[1])]
+    #             )
+
+    #     return sorted_list
+
+    def long_sorting(self, val_list):
+        """
+        calculate sorting indexes
+        without duplicates
+        """
         sorted_list = list()
         for item in val_list:
-            sorted_list.append(
-                [i[0] for i in sorted(enumerate(item), key=lambda x:x[1])]
-                )
+            ranks = {y: x for x, y in enumerate(sorted(set(item)))}
+            sorted_item = [ranks[x] for x in item]
+            sorted_list.append(sorted_item)
 
         return sorted_list
 
